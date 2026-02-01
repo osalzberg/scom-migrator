@@ -1,11 +1,20 @@
 {
   "navigationFallback": {
-    "rewrite": "/index.html"
+    "rewrite": "/index.html",
+    "exclude": ["/api/*", "/screenshots/*", "*.html", "*.jpg", "*.png", "*.gif", "*.svg", "*.js", "*.css"]
   },
   "routes": [
     {
       "route": "/api/*",
       "allowedRoles": ["anonymous"]
+    },
+    {
+      "route": "/portfolio",
+      "rewrite": "/portfolio.html"
+    },
+    {
+      "route": "/tools",
+      "rewrite": "/portfolio.html"
     }
   ],
   "responseOverrides": {
