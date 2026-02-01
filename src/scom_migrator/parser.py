@@ -111,17 +111,22 @@ class ManagementPackParser:
         ],
     }
     
-    def __init__(self, file_path: str | Path):
+    def __init__(self, file_path: str | Path | None = None, content: bytes | str | None = None):
         """
-        Initialize the parser with a management pack file.
+        Initialize the parser with a management pack file or content.
         
         Args:
             file_path: Path to the management pack XML file
+            content: Raw XML content as bytes or string (for serverless environments)
         """
-        self.file_path = Path(file_path)
+        self.file_path = Path(file_path) if file_path else None
+        self._content = content
         self._tree: Optional[ET.ElementTree] = None
         self._root: Optional[ET.Element] = None
         self._detected_namespace: str = ""
+        
+        if not file_path and not content:
+            raise ValueError("Either file_path or content must be provided")
     
     def parse(self) -> ManagementPack:
         """
@@ -149,13 +154,23 @@ class ManagementPackParser:
         )
     
     def _load_xml(self) -> None:
-        """Load and parse the XML file safely."""
-        if not self.file_path.exists():
-            raise FileNotFoundError(f"Management pack not found: {self.file_path}")
-        
-        # Use defusedxml for safe parsing
-        self._tree = SafeET.parse(str(self.file_path))
-        self._root = self._tree.getroot()
+        """Load and parse the XML file or content safely."""
+        if self._content:
+            # Parse from content bytes or string
+            if isinstance(self._content, str):
+                self._root = SafeET.fromstring(self._content)
+            else:
+                self._root = SafeET.fromstring(self._content)
+            self._tree = ET.ElementTree(self._root)
+        elif self.file_path:
+            if not self.file_path.exists():
+                raise FileNotFoundError(f"Management pack not found: {self.file_path}")
+            
+            # Use defusedxml for safe parsing
+            self._tree = SafeET.parse(str(self.file_path))
+            self._root = self._tree.getroot()
+        else:
+            raise ValueError("No file path or content provided")
         
         # Detect namespace from root element
         if self._root.tag.startswith("{"):

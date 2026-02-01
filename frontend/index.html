@@ -1,35 +1,3 @@
-"""
-Web Server for SCOM to Azure Monitor Migration Tool
-
-Provides a web interface for uploading and analyzing management packs.
-"""
-
-import json
-import tempfile
-import os
-from pathlib import Path
-from typing import Optional
-
-from flask import Flask, request, jsonify, render_template_string, send_file
-from werkzeug.utils import secure_filename
-
-from .parser import ManagementPackParser
-from .analyzer import MigrationAnalyzer
-from .generator import ARMTemplateGenerator
-
-app = Flask(__name__)
-app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max file size
-app.config['UPLOAD_FOLDER'] = tempfile.gettempdir()
-
-ALLOWED_EXTENSIONS = {'xml', 'mp'}
-
-# Store the last analysis for download
-last_analysis = {}
-
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
-HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -202,7 +170,7 @@ HTML_TEMPLATE = """
             left: 0;
             right: 0;
             height: 4px;
-            background: var(--gradient-3);
+            background: var(--gradient-1);
         }
         
         .stat-card:hover {
@@ -215,7 +183,7 @@ HTML_TEMPLATE = """
             font-weight: 700;
             color: var(--azure-dark);
             margin: 0;
-            background: var(--gradient-3);
+            background: var(--gradient-1);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
@@ -1028,121 +996,3 @@ HTML_TEMPLATE = """
     </script>
 </body>
 </html>
-"""
-
-@app.route('/')
-def index():
-    """Serve the main page."""
-    return render_template_string(HTML_TEMPLATE)
-
-@app.route('/api/analyze', methods=['POST'])
-def analyze():
-    """Analyze an uploaded management pack."""
-    global last_analysis
-    
-    if 'file' not in request.files:
-        return jsonify({'error': 'No file provided'}), 400
-    
-    file = request.files['file']
-    
-    if file.filename == '':
-        return jsonify({'error': 'No file selected'}), 400
-    
-    if not allowed_file(file.filename):
-        return jsonify({'error': 'Invalid file type. Please upload .xml or .mp file'}), 400
-    
-    try:
-        # Save file temporarily
-        filename = secure_filename(file.filename)
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        file.save(filepath)
-        
-        # Parse and analyze
-        parser = ManagementPackParser(filepath)
-        mp = parser.parse()
-        
-        analyzer = MigrationAnalyzer()
-        report = analyzer.analyze(mp)
-        
-        # Generate templates for download
-        generator = ARMTemplateGenerator()
-        arm_template = generator.generate_from_report(report)
-        dcr_template = generator.generate_data_collection_rules(report)
-        
-        # Store for download
-        last_analysis = {
-            'report': report,
-            'arm_template': arm_template,
-            'dcr_template': dcr_template,
-        }
-        
-        # Get stats
-        stats = analyzer.get_summary_stats(report)
-        
-        # Clean up
-        os.remove(filepath)
-        
-        # Return results
-        result = report.model_dump()
-        result['stats'] = stats
-        
-        return jsonify(result)
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/download/<artifact_type>')
-def download(artifact_type):
-    """Download generated artifacts."""
-    global last_analysis
-    
-    if not last_analysis:
-        return jsonify({'error': 'No analysis available'}), 400
-    
-    try:
-        if artifact_type == 'arm':
-            content = json.dumps(last_analysis['arm_template'], indent=2)
-            filename = 'azuredeploy.json'
-        elif artifact_type == 'dcr':
-            content = json.dumps(last_analysis['dcr_template'], indent=2)
-            filename = 'data-collection-rules.json'
-        elif artifact_type == 'report':
-            content = last_analysis['report'].model_dump_json(indent=2)
-            filename = 'migration-report.json'
-        else:
-            return jsonify({'error': 'Invalid artifact type'}), 400
-        
-        # Create temp file
-        temp_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        with open(temp_path, 'w') as f:
-            f.write(content)
-        
-        return send_file(
-            temp_path,
-            as_attachment=True,
-            download_name=filename,
-            mimetype='application/json'
-        )
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-def run_server(host='0.0.0.0', port=5000, debug=True):
-    """Run the web server."""
-    print(f"""
-╔═══════════════════════════════════════════════════════════════╗
-║         SCOM to Azure Monitor Migration Tool                  ║
-║                     Web Interface                             ║
-╚═══════════════════════════════════════════════════════════════╝
-
-Server running at: http://localhost:{port}
-
-Upload your Management Pack files to analyze and generate
-Azure Monitor migration artifacts.
-
-Press Ctrl+C to stop the server.
-""")
-    app.run(host=host, port=port, debug=debug)
-
-if __name__ == '__main__':
-    run_server()
