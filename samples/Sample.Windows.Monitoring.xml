@@ -1,0 +1,457 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ManagementPack ContentReadable="true" SchemaVersion="2.0" OriginalSchemaVersion="1.1"
+                xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+                xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <Manifest>
+    <Identity>
+      <ID>Sample.Windows.Monitoring</ID>
+      <Version>1.0.0.0</Version>
+    </Identity>
+    <Name>Sample Windows Monitoring Pack</Name>
+    <References>
+      <Reference Alias="Windows">
+        <ID>Microsoft.Windows.Library</ID>
+        <Version>7.5.8501.0</Version>
+        <PublicKeyToken>31bf3856ad364e35</PublicKeyToken>
+      </Reference>
+      <Reference Alias="System">
+        <ID>System.Library</ID>
+        <Version>7.5.8501.0</Version>
+        <PublicKeyToken>31bf3856ad364e35</PublicKeyToken>
+      </Reference>
+      <Reference Alias="Health">
+        <ID>System.Health.Library</ID>
+        <Version>7.0.8433.0</Version>
+        <PublicKeyToken>31bf3856ad364e35</PublicKeyToken>
+      </Reference>
+    </References>
+  </Manifest>
+  
+  <TypeDefinitions>
+    <EntityTypes>
+      <ClassTypes>
+        <ClassType ID="Sample.Windows.Server" Accessibility="Public" Abstract="false" Base="Windows!Microsoft.Windows.LocalApplication" Hosted="true" Singleton="false">
+          <Property ID="ServerRole" Type="string" Key="false" CaseSensitive="false" MaxLength="256" MinLength="0"/>
+          <Property ID="Environment" Type="string" Key="false" CaseSensitive="false" MaxLength="256" MinLength="0"/>
+        </ClassType>
+        
+        <ClassType ID="Sample.Windows.WebServer" Accessibility="Public" Abstract="false" Base="Sample.Windows.Server" Hosted="true" Singleton="false">
+          <Property ID="WebSiteName" Type="string" Key="true" CaseSensitive="false" MaxLength="256" MinLength="0"/>
+          <Property ID="BindingPort" Type="int" Key="false"/>
+        </ClassType>
+      </ClassTypes>
+      
+      <RelationshipTypes>
+        <RelationshipType ID="Sample.Windows.Server.Hosts.WebServer" Accessibility="Public" Abstract="false" Base="System!System.Hosting">
+          <Source ID="Server" Type="Sample.Windows.Server"/>
+          <Target ID="WebServer" Type="Sample.Windows.WebServer"/>
+        </RelationshipType>
+      </RelationshipTypes>
+    </EntityTypes>
+  </TypeDefinitions>
+  
+  <Monitoring>
+    <Discoveries>
+      <Discovery ID="Sample.Windows.Server.Discovery" Enabled="true" Target="Windows!Microsoft.Windows.Server.OperatingSystem" ConfirmDelivery="false" Remotable="true" Priority="Normal">
+        <Category>Discovery</Category>
+        <DiscoveryTypes>
+          <DiscoveryClass TypeID="Sample.Windows.Server"/>
+        </DiscoveryTypes>
+        <DataSource ID="DS" TypeID="Windows!Microsoft.Windows.WmiProviderWithClassSnapshotDataMapper">
+          <NameSpace>root\cimv2</NameSpace>
+          <Query>SELECT Name, Caption FROM Win32_ComputerSystem</Query>
+          <Frequency>86400</Frequency>
+          <ClassId>$MPElement[Name="Sample.Windows.Server"]$</ClassId>
+          <InstanceSettings>
+            <Settings>
+              <Setting>
+                <Name>$MPElement[Name="Windows!Microsoft.Windows.Computer"]/PrincipalName$</Name>
+                <Value>$Target/Host/Property[Type="Windows!Microsoft.Windows.Computer"]/PrincipalName$</Value>
+              </Setting>
+            </Settings>
+          </InstanceSettings>
+        </DataSource>
+      </Discovery>
+      
+      <Discovery ID="Sample.Windows.WebServer.Discovery" Enabled="true" Target="Sample.Windows.Server" ConfirmDelivery="false" Remotable="true" Priority="Normal">
+        <Category>Discovery</Category>
+        <DiscoveryTypes>
+          <DiscoveryClass TypeID="Sample.Windows.WebServer"/>
+        </DiscoveryTypes>
+        <DataSource ID="DS" TypeID="Windows!Microsoft.Windows.RegistryDiscoveryProvider">
+          <ComputerName>$Target/Host/Property[Type="Windows!Microsoft.Windows.Computer"]/PrincipalName$</ComputerName>
+          <RegistryAttributeDefinitions>
+            <RegistryAttributeDefinition>
+              <AttributeName>IISInstalled</AttributeName>
+              <Path>SOFTWARE\Microsoft\InetStp\InstallPath</Path>
+              <PathType>1</PathType>
+              <AttributeType>0</AttributeType>
+            </RegistryAttributeDefinition>
+          </RegistryAttributeDefinitions>
+          <Frequency>86400</Frequency>
+          <ClassId>$MPElement[Name="Sample.Windows.WebServer"]$</ClassId>
+        </DataSource>
+      </Discovery>
+    </Discoveries>
+    
+    <Monitors>
+      <!-- CPU Monitor -->
+      <UnitMonitor ID="Sample.Windows.Server.CPU.Monitor" Accessibility="Public" Enabled="true" Target="Sample.Windows.Server" ParentMonitorID="Health!System.Health.PerformanceState" Remotable="true" Priority="Normal" TypeID="Windows!Microsoft.Windows.Performance.ThresholdMonitorType" ConfirmDelivery="false">
+        <Category>PerformanceHealth</Category>
+        <AlertSettings AlertMessage="Sample.Windows.Server.CPU.Monitor.AlertMessage">
+          <AlertOnState>Warning</AlertOnState>
+          <AutoResolve>true</AutoResolve>
+          <AlertPriority>Normal</AlertPriority>
+          <AlertSeverity>Warning</AlertSeverity>
+        </AlertSettings>
+        <OperationalStates>
+          <OperationalState ID="Healthy" MonitorTypeStateID="UnderThreshold" HealthState="Success"/>
+          <OperationalState ID="Warning" MonitorTypeStateID="OverThreshold" HealthState="Warning"/>
+        </OperationalStates>
+        <Configuration>
+          <ComputerName>$Target/Host/Property[Type="Windows!Microsoft.Windows.Computer"]/PrincipalName$</ComputerName>
+          <CounterName>% Processor Time</CounterName>
+          <ObjectName>Processor</ObjectName>
+          <InstanceName>_Total</InstanceName>
+          <AllInstances>false</AllInstances>
+          <Frequency>300</Frequency>
+          <Threshold>85</Threshold>
+          <Direction>Over</Direction>
+        </Configuration>
+      </UnitMonitor>
+      
+      <!-- Memory Monitor -->
+      <UnitMonitor ID="Sample.Windows.Server.Memory.Monitor" Accessibility="Public" Enabled="true" Target="Sample.Windows.Server" ParentMonitorID="Health!System.Health.PerformanceState" Remotable="true" Priority="Normal" TypeID="Windows!Microsoft.Windows.Performance.ThresholdMonitorType" ConfirmDelivery="false">
+        <Category>PerformanceHealth</Category>
+        <AlertSettings AlertMessage="Sample.Windows.Server.Memory.Monitor.AlertMessage">
+          <AlertOnState>Error</AlertOnState>
+          <AutoResolve>true</AutoResolve>
+          <AlertPriority>High</AlertPriority>
+          <AlertSeverity>Error</AlertSeverity>
+        </AlertSettings>
+        <OperationalStates>
+          <OperationalState ID="Healthy" MonitorTypeStateID="UnderThreshold" HealthState="Success"/>
+          <OperationalState ID="Critical" MonitorTypeStateID="OverThreshold" HealthState="Error"/>
+        </OperationalStates>
+        <Configuration>
+          <ComputerName>$Target/Host/Property[Type="Windows!Microsoft.Windows.Computer"]/PrincipalName$</ComputerName>
+          <CounterName>Available MBytes</CounterName>
+          <ObjectName>Memory</ObjectName>
+          <InstanceName></InstanceName>
+          <AllInstances>false</AllInstances>
+          <Frequency>300</Frequency>
+          <Threshold>512</Threshold>
+          <Direction>Under</Direction>
+        </Configuration>
+      </UnitMonitor>
+      
+      <!-- Disk Space Monitor -->
+      <UnitMonitor ID="Sample.Windows.Server.DiskSpace.Monitor" Accessibility="Public" Enabled="true" Target="Sample.Windows.Server" ParentMonitorID="Health!System.Health.AvailabilityState" Remotable="true" Priority="Normal" TypeID="Windows!Microsoft.Windows.Performance.ThresholdMonitorType" ConfirmDelivery="false">
+        <Category>AvailabilityHealth</Category>
+        <AlertSettings AlertMessage="Sample.Windows.Server.DiskSpace.Monitor.AlertMessage">
+          <AlertOnState>Warning</AlertOnState>
+          <AutoResolve>true</AutoResolve>
+          <AlertPriority>Normal</AlertPriority>
+          <AlertSeverity>Warning</AlertSeverity>
+        </AlertSettings>
+        <OperationalStates>
+          <OperationalState ID="Healthy" MonitorTypeStateID="UnderThreshold" HealthState="Success"/>
+          <OperationalState ID="Warning" MonitorTypeStateID="OverThreshold" HealthState="Warning"/>
+        </OperationalStates>
+        <Configuration>
+          <ComputerName>$Target/Host/Property[Type="Windows!Microsoft.Windows.Computer"]/PrincipalName$</ComputerName>
+          <CounterName>% Free Space</CounterName>
+          <ObjectName>LogicalDisk</ObjectName>
+          <InstanceName>C:</InstanceName>
+          <AllInstances>false</AllInstances>
+          <Frequency>900</Frequency>
+          <Threshold>10</Threshold>
+          <Direction>Under</Direction>
+        </Configuration>
+      </UnitMonitor>
+      
+      <!-- Service Monitor -->
+      <UnitMonitor ID="Sample.Windows.Server.W3SVC.Monitor" Accessibility="Public" Enabled="true" Target="Sample.Windows.WebServer" ParentMonitorID="Health!System.Health.AvailabilityState" Remotable="true" Priority="Normal" TypeID="Windows!Microsoft.Windows.CheckNTServiceStateMonitorType" ConfirmDelivery="false">
+        <Category>AvailabilityHealth</Category>
+        <AlertSettings AlertMessage="Sample.Windows.Server.W3SVC.Monitor.AlertMessage">
+          <AlertOnState>Error</AlertOnState>
+          <AutoResolve>true</AutoResolve>
+          <AlertPriority>High</AlertPriority>
+          <AlertSeverity>Error</AlertSeverity>
+        </AlertSettings>
+        <OperationalStates>
+          <OperationalState ID="Running" MonitorTypeStateID="Running" HealthState="Success"/>
+          <OperationalState ID="NotRunning" MonitorTypeStateID="NotRunning" HealthState="Error"/>
+        </OperationalStates>
+        <Configuration>
+          <ComputerName>$Target/Host/Property[Type="Windows!Microsoft.Windows.Computer"]/PrincipalName$</ComputerName>
+          <ServiceName>W3SVC</ServiceName>
+          <CheckStartupType>true</CheckStartupType>
+        </Configuration>
+      </UnitMonitor>
+
+      <!-- Event Log Monitor -->
+      <UnitMonitor ID="Sample.Windows.Server.CriticalEvent.Monitor" Accessibility="Public" Enabled="true" Target="Sample.Windows.Server" ParentMonitorID="Health!System.Health.AvailabilityState" Remotable="true" Priority="Normal" TypeID="Windows!Microsoft.Windows.RepeatedEventLogSingleEventLog2StateMonitorType" ConfirmDelivery="false">
+        <Category>EventCollection</Category>
+        <AlertSettings AlertMessage="Sample.Windows.Server.CriticalEvent.AlertMessage">
+          <AlertOnState>Error</AlertOnState>
+          <AutoResolve>true</AutoResolve>
+          <AlertPriority>High</AlertPriority>
+          <AlertSeverity>Error</AlertSeverity>
+        </AlertSettings>
+        <OperationalStates>
+          <OperationalState ID="Healthy" MonitorTypeStateID="ManualResetEventRaised" HealthState="Success"/>
+          <OperationalState ID="Critical" MonitorTypeStateID="EventRaised" HealthState="Error"/>
+        </OperationalStates>
+        <Configuration>
+          <ComputerName>$Target/Host/Property[Type="Windows!Microsoft.Windows.Computer"]/PrincipalName$</ComputerName>
+          <LogName>Application</LogName>
+          <Expression>
+            <And>
+              <Expression>
+                <SimpleExpression>
+                  <ValueExpression>
+                    <XPathQuery Type="UnsignedInteger">EventDisplayNumber</XPathQuery>
+                  </ValueExpression>
+                  <Operator>Equal</Operator>
+                  <ValueExpression>
+                    <Value Type="UnsignedInteger">1001</Value>
+                  </ValueExpression>
+                </SimpleExpression>
+              </Expression>
+              <Expression>
+                <SimpleExpression>
+                  <ValueExpression>
+                    <XPathQuery Type="String">PublisherName</XPathQuery>
+                  </ValueExpression>
+                  <Operator>Equal</Operator>
+                  <ValueExpression>
+                    <Value Type="String">Application Error</Value>
+                  </ValueExpression>
+                </SimpleExpression>
+              </Expression>
+            </And>
+          </Expression>
+          <Count>3</Count>
+          <TimeWindowInSeconds>3600</TimeWindowInSeconds>
+        </Configuration>
+      </UnitMonitor>
+    </Monitors>
+    
+    <Rules>
+      <!-- Performance Collection Rule - CPU -->
+      <Rule ID="Sample.Windows.Server.CPU.Collection.Rule" Enabled="true" Target="Sample.Windows.Server" ConfirmDelivery="false" Remotable="true" Priority="Normal" DiscardLevel="100">
+        <Category>PerformanceCollection</Category>
+        <DataSources>
+          <DataSource ID="DS" TypeID="Windows!Microsoft.Windows.TimedPowerShell.PerformanceProvider">
+            <IntervalSeconds>300</IntervalSeconds>
+            <SyncTime/>
+            <ScriptName>CPUCollection.ps1</ScriptName>
+            <ScriptBody>
+              $counterValue = (Get-Counter '\Processor(_Total)\% Processor Time').CounterSamples.CookedValue
+              $api = new-object -comObject 'MOM.ScriptAPI'
+              $bag = $api.CreatePropertyBag()
+              $bag.AddValue('Value', $counterValue)
+              $bag
+            </ScriptBody>
+            <Parameters/>
+            <TimeoutSeconds>120</TimeoutSeconds>
+          </DataSource>
+        </DataSources>
+        <WriteActions>
+          <WriteAction ID="WA" TypeID="Windows!Microsoft.Windows.Performance.OptimizedDataCache">
+            <ObjectName>Processor</ObjectName>
+            <CounterName>% Processor Time</CounterName>
+            <InstanceName>_Total</InstanceName>
+            <Value>$Data/Property[@Name='Value']$</Value>
+          </WriteAction>
+        </WriteActions>
+      </Rule>
+      
+      <!-- Event Collection Rule -->
+      <Rule ID="Sample.Windows.Server.SecurityEvent.Collection.Rule" Enabled="true" Target="Sample.Windows.Server" ConfirmDelivery="false" Remotable="true" Priority="Normal" DiscardLevel="100">
+        <Category>EventCollection</Category>
+        <DataSources>
+          <DataSource ID="DS" TypeID="Windows!Microsoft.Windows.EventProvider">
+            <ComputerName>$Target/Host/Property[Type="Windows!Microsoft.Windows.Computer"]/PrincipalName$</ComputerName>
+            <LogName>Security</LogName>
+            <Expression>
+              <Or>
+                <Expression>
+                  <SimpleExpression>
+                    <ValueExpression>
+                      <XPathQuery Type="UnsignedInteger">EventDisplayNumber</XPathQuery>
+                    </ValueExpression>
+                    <Operator>Equal</Operator>
+                    <ValueExpression>
+                      <Value Type="UnsignedInteger">4625</Value>
+                    </ValueExpression>
+                  </SimpleExpression>
+                </Expression>
+                <Expression>
+                  <SimpleExpression>
+                    <ValueExpression>
+                      <XPathQuery Type="UnsignedInteger">EventDisplayNumber</XPathQuery>
+                    </ValueExpression>
+                    <Operator>Equal</Operator>
+                    <ValueExpression>
+                      <Value Type="UnsignedInteger">4624</Value>
+                    </ValueExpression>
+                  </SimpleExpression>
+                </Expression>
+              </Or>
+            </Expression>
+          </DataSource>
+        </DataSources>
+        <WriteActions>
+          <WriteAction ID="WA" TypeID="System!System.CollectionRule.PublishToDatabase">
+            <EventOriginId>$Data/EventOriginId$</EventOriginId>
+            <PublisherId>$Data/PublisherId$</PublisherId>
+            <PublisherName>$Data/PublisherName$</PublisherName>
+            <Channel>$Data/Channel$</Channel>
+            <LoggingComputer>$Data/LoggingComputer$</LoggingComputer>
+            <EventNumber>$Data/EventDisplayNumber$</EventNumber>
+            <EventCategory>$Data/EventCategory$</EventCategory>
+            <EventLevel>$Data/EventLevel$</EventLevel>
+            <UserName>$Data/UserName$</UserName>
+            <Description>$Data/EventDescription$</Description>
+          </WriteAction>
+        </WriteActions>
+      </Rule>
+      
+      <!-- Alert Rule -->
+      <Rule ID="Sample.Windows.Server.HighCPU.Alert.Rule" Enabled="true" Target="Sample.Windows.Server" ConfirmDelivery="false" Remotable="true" Priority="Normal" DiscardLevel="100">
+        <Category>Alert</Category>
+        <DataSources>
+          <DataSource ID="DS" TypeID="Windows!Microsoft.Windows.Performance.DataProvider">
+            <ComputerName>$Target/Host/Property[Type="Windows!Microsoft.Windows.Computer"]/PrincipalName$</ComputerName>
+            <CounterName>% Processor Time</CounterName>
+            <ObjectName>Processor</ObjectName>
+            <InstanceName>_Total</InstanceName>
+            <AllInstances>false</AllInstances>
+            <Frequency>300</Frequency>
+          </DataSource>
+        </DataSources>
+        <ConditionDetection ID="CD" TypeID="System!System.Performance.ConsecutiveCondition">
+          <Threshold>95</Threshold>
+          <Direction>Over</Direction>
+          <ConsecutiveSamples>3</ConsecutiveSamples>
+        </ConditionDetection>
+        <WriteActions>
+          <WriteAction ID="Alert" TypeID="Health!System.Health.GenerateAlert">
+            <Priority>1</Priority>
+            <Severity>2</Severity>
+            <AlertMessageId>$MPElement[Name="Sample.Windows.Server.HighCPU.AlertMessage"]$</AlertMessageId>
+            <AlertParameters>
+              <AlertParameter1>$Data/ObjectName$</AlertParameter1>
+              <AlertParameter2>$Data/CounterName$</AlertParameter2>
+              <AlertParameter3>$Data/Value$</AlertParameter3>
+            </AlertParameters>
+          </WriteAction>
+        </WriteActions>
+      </Rule>
+    </Rules>
+  </Monitoring>
+  
+  <Presentation>
+    <StringResources>
+      <StringResource ID="Sample.Windows.Server.CPU.Monitor.AlertMessage"/>
+      <StringResource ID="Sample.Windows.Server.Memory.Monitor.AlertMessage"/>
+      <StringResource ID="Sample.Windows.Server.DiskSpace.Monitor.AlertMessage"/>
+      <StringResource ID="Sample.Windows.Server.W3SVC.Monitor.AlertMessage"/>
+      <StringResource ID="Sample.Windows.Server.CriticalEvent.AlertMessage"/>
+      <StringResource ID="Sample.Windows.Server.HighCPU.AlertMessage"/>
+    </StringResources>
+  </Presentation>
+  
+  <LanguagePacks>
+    <LanguagePack ID="ENU" IsDefault="true">
+      <DisplayStrings>
+        <DisplayString ElementID="Sample.Windows.Monitoring">
+          <Name>Sample Windows Monitoring Pack</Name>
+          <Description>A sample management pack demonstrating common Windows monitoring scenarios for migration to Azure Monitor.</Description>
+        </DisplayString>
+        
+        <DisplayString ElementID="Sample.Windows.Server">
+          <Name>Sample Windows Server</Name>
+          <Description>Represents a Windows Server being monitored.</Description>
+        </DisplayString>
+        
+        <DisplayString ElementID="Sample.Windows.WebServer">
+          <Name>Sample Windows Web Server</Name>
+          <Description>Represents a Windows Web Server with IIS.</Description>
+        </DisplayString>
+        
+        <DisplayString ElementID="Sample.Windows.Server.CPU.Monitor">
+          <Name>CPU Utilization Monitor</Name>
+          <Description>Monitors CPU utilization and alerts when it exceeds 85%.</Description>
+        </DisplayString>
+        
+        <DisplayString ElementID="Sample.Windows.Server.Memory.Monitor">
+          <Name>Available Memory Monitor</Name>
+          <Description>Monitors available memory and alerts when it falls below 512 MB.</Description>
+        </DisplayString>
+        
+        <DisplayString ElementID="Sample.Windows.Server.DiskSpace.Monitor">
+          <Name>Disk Space Monitor</Name>
+          <Description>Monitors disk free space and alerts when it falls below 10%.</Description>
+        </DisplayString>
+        
+        <DisplayString ElementID="Sample.Windows.Server.W3SVC.Monitor">
+          <Name>IIS World Wide Web Publishing Service Monitor</Name>
+          <Description>Monitors the W3SVC service state on web servers.</Description>
+        </DisplayString>
+        
+        <DisplayString ElementID="Sample.Windows.Server.CriticalEvent.Monitor">
+          <Name>Critical Application Event Monitor</Name>
+          <Description>Monitors for critical application crash events (Event ID 1001).</Description>
+        </DisplayString>
+        
+        <DisplayString ElementID="Sample.Windows.Server.CPU.Collection.Rule">
+          <Name>CPU Performance Collection Rule</Name>
+          <Description>Collects CPU performance data every 5 minutes using PowerShell.</Description>
+        </DisplayString>
+        
+        <DisplayString ElementID="Sample.Windows.Server.SecurityEvent.Collection.Rule">
+          <Name>Security Event Collection Rule</Name>
+          <Description>Collects Windows Security events for logon success and failure.</Description>
+        </DisplayString>
+        
+        <DisplayString ElementID="Sample.Windows.Server.HighCPU.Alert.Rule">
+          <Name>High CPU Alert Rule</Name>
+          <Description>Generates an alert when CPU exceeds 95% for 3 consecutive samples.</Description>
+        </DisplayString>
+        
+        <DisplayString ElementID="Sample.Windows.Server.CPU.Monitor.AlertMessage">
+          <Name>High CPU Utilization Detected</Name>
+          <Description>CPU utilization has exceeded the warning threshold of 85%. Current utilization is above the threshold.</Description>
+        </DisplayString>
+        
+        <DisplayString ElementID="Sample.Windows.Server.Memory.Monitor.AlertMessage">
+          <Name>Low Available Memory</Name>
+          <Description>Available memory has fallen below the critical threshold of 512 MB. This may impact system performance.</Description>
+        </DisplayString>
+        
+        <DisplayString ElementID="Sample.Windows.Server.DiskSpace.Monitor.AlertMessage">
+          <Name>Low Disk Space Warning</Name>
+          <Description>Disk free space has fallen below 10%. Please free up disk space to avoid potential issues.</Description>
+        </DisplayString>
+        
+        <DisplayString ElementID="Sample.Windows.Server.W3SVC.Monitor.AlertMessage">
+          <Name>IIS Service Not Running</Name>
+          <Description>The World Wide Web Publishing Service (W3SVC) is not running. Web applications may be unavailable.</Description>
+        </DisplayString>
+        
+        <DisplayString ElementID="Sample.Windows.Server.CriticalEvent.AlertMessage">
+          <Name>Critical Application Events Detected</Name>
+          <Description>Multiple application crash events (Event ID 1001) have been detected within the last hour.</Description>
+        </DisplayString>
+        
+        <DisplayString ElementID="Sample.Windows.Server.HighCPU.AlertMessage">
+          <Name>Sustained High CPU Alert</Name>
+          <Description>CPU utilization has exceeded 95% for 3 consecutive samples. Object: {0}, Counter: {1}, Value: {2}%</Description>
+        </DisplayString>
+      </DisplayStrings>
+    </LanguagePack>
+  </LanguagePacks>
+</ManagementPack>

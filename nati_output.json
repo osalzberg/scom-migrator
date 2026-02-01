@@ -1,0 +1,68 @@
+======================================================================
+SCOM to Azure Monitor Migration Analysis
+======================================================================
+
+Management Pack: NATI test ASD Class
+Version: 1.0.0.0
+Analysis Date: 2026-02-01T10:31:14.186474+00:00
+
+----------------------------------------------------------------------
+SUMMARY
+----------------------------------------------------------------------
+Total Components: 6
+Easily Migratable: 4
+Requires Manual Review: 2
+Cannot Migrate: 0
+Estimated Effort: 37.0 hours
+
+----------------------------------------------------------------------
+RECOMMENDATIONS
+----------------------------------------------------------------------
+
+⚠️ **UNSUPPORTED FEATURES DETECTED**: The following SCOM features cannot be migrated automatically:
+
+   • Override Configurations - Must be manually recreated in Azure Monitor alert rules
+
+
+
+⚠️ **Moderate migration complexity**: 67% of components can be migrated easily. Plan additional time for the remaining 33%.
+
+📊 **Performance Monitoring**: Deploy Azure Monitor Agent with Data Collection Rules to collect performance counters. Consider using VM Insights for comprehensive VM monitoring.
+
+📋 **Event Monitoring**: Configure Windows Event collection via Data Collection Rules. Create Log Analytics scheduled query alerts for critical events.
+
+⚡ **Script-based Monitoring**: Review all script-based monitors carefully. Consider migrating to Azure Functions, Azure Automation, or Azure Monitor custom metrics API.
+
+🔍 **Discovery**: Azure uses a different resource model than SCOM. Use Azure Resource Graph for resource discovery and VM Insights for dependency mapping.
+
+🔔 **Alerts**: 4 items generate alerts. Create Action Groups in Azure Monitor to define notification targets (email, SMS, webhooks, etc.).
+
+🏗️ **Recommended Architecture**:
+   1. Deploy Azure Monitor Agent to all target machines
+   2. Create a central Log Analytics workspace
+   3. Configure Data Collection Rules for each data type
+   4. Create alert rules and action groups
+   5. Build Azure Workbooks for visualization
+
+----------------------------------------------------------------------
+PREREQUISITES
+----------------------------------------------------------------------
+• Azure subscription with appropriate permissions (Contributor or Monitoring Contributor)
+• Log Analytics workspace
+• Azure Monitor Agent deployed to target machines
+• Azure subscription with Reader access
+• Configure tracking for PlugPlay service
+• VM Insights enabled on target machines
+• Data Collection Rule for System event log
+• Azure Monitor Agent on target machines
+• Create custom KQL query or metric alert
+• Determine equivalent Azure Monitor data source
+• Azure Automation Account
+• Change Tracking solution enabled
+• Dependency agent installed
+• Change Tracking and Inventory solution enabled
+• Enable Change Tracking and Inventory solution
+• Dependency Agent for Service Map
+• Review original SCOM monitor configuration
+• Azure Monitor Agent on target VMs
+• For on-premises: Azure Arc enabled servers

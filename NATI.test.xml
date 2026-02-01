@@ -1,0 +1,295 @@
+<ManagementPack xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" ContentReadable="true">
+    <Manifest>
+      <Identity>
+        <ID>NATI.test</ID>
+        <Version>1.0.0.0</Version>
+      </Identity>
+      <Name>NATI.test</Name>
+      <References>
+        <Reference Alias="System">
+          <ID>System.Library</ID>
+          <Version>7.5.8501.0</Version>
+          <PublicKeyToken>31bf3856ad364e35</PublicKeyToken>
+        </Reference>
+        <Reference Alias="Windows">
+          <ID>Microsoft.Windows.Library</ID>
+          <Version>7.5.8501.0</Version>
+          <PublicKeyToken>31bf3856ad364e35</PublicKeyToken>
+        </Reference>
+        <Reference Alias="Health">
+          <ID>System.Health.Library</ID>
+          <Version>7.0.8437.0</Version>
+          <PublicKeyToken>31bf3856ad364e35</PublicKeyToken>
+        </Reference>
+      </References>
+      
+    </Manifest>
+    <TypeDefinitions>
+      <EntityTypes>
+        <ClassTypes>
+          <ClassType ID="NATI.test.ASD.Class" Base="Windows!Microsoft.Windows.LocalApplication" Accessibility="Public" Abstract="false" Hosted="true" Singleton="false"/>
+        </ClassTypes>
+      </EntityTypes>
+    <MonitorTypes>
+  <UnitMonitorType ID="NATI.test.DSF.Instance1.ProcessCount.MonitorType" Accessibility="Public">
+              <MonitorTypeStates>
+                <MonitorTypeState ID="ProcessCountThresholdBreached" NoDetection="false"/>
+                <MonitorTypeState ID="ProcessCountWithinThresholds" NoDetection="false"/>
+              </MonitorTypeStates>
+              <Configuration>
+                <IncludeSchemaTypes>
+                  <SchemaType>System!System.ExpressionEvaluatorSchema</SchemaType>
+                </IncludeSchemaTypes>
+                <xsd:element xmlns:xsd="http://www.w3.org/2001/XMLSchema" name="ProcessName" type="xsd:string"/>
+                <xsd:element xmlns:xsd="http://www.w3.org/2001/XMLSchema" name="FrequencySeconds" type="xsd:unsignedInt"/>
+                <xsd:element xmlns:xsd="http://www.w3.org/2001/XMLSchema" name="MinProcessCount" type="xsd:unsignedInt"/>
+                <xsd:element xmlns:xsd="http://www.w3.org/2001/XMLSchema" name="MaxProcessCount" type="xsd:unsignedInt"/>
+                <xsd:element xmlns:xsd="http://www.w3.org/2001/XMLSchema" name="MatchCount" type="xsd:integer"/>
+              </Configuration>
+              <OverrideableParameters>
+                <OverrideableParameter ID="FrequencySeconds" Selector="$Config/FrequencySeconds$" ParameterType="int"/>
+                <OverrideableParameter ID="MinProcessCount" Selector="$Config/MinProcessCount$" ParameterType="int"/>
+                <OverrideableParameter ID="MaxProcessCount" Selector="$Config/MaxProcessCount$" ParameterType="int"/>
+                <OverrideableParameter ID="MatchCount" Selector="$Config/MatchCount$" ParameterType="int"/>
+              </OverrideableParameters>
+              <MonitorImplementation>
+                <MemberModules>
+                  <DataSource ID="DS" TypeID="System!System.ProcessInformationProvider">
+                    <Frequency>$Config/FrequencySeconds$</Frequency>
+                  </DataSource>
+                  <ConditionDetection ID="CDProcessCountWithinThresholds" TypeID="System!System.ExpressionFilter">
+                    <Expression>
+                      <And>
+                        <Expression>
+                          <Exists>
+                            <ValueExpression>
+                              <XPathQuery Type="UnsignedInteger">ProcessInformations/ProcessInformation[./ProcessName ='$Config/ProcessName$']/ActiveInstanceCount</XPathQuery>
+                            </ValueExpression>
+                          </Exists>
+                        </Expression>
+                        <Expression>
+                          <SimpleExpression>
+                            <ValueExpression>
+                              <XPathQuery Type="UnsignedInteger">ProcessInformations/ProcessInformation[./ProcessName ='$Config/ProcessName$']/ActiveInstanceCount</XPathQuery>
+                            </ValueExpression>
+                            <Operator>GreaterEqual</Operator>
+                            <ValueExpression>
+                              <Value Type="UnsignedInteger">$Config/MinProcessCount$</Value>
+                            </ValueExpression>
+                          </SimpleExpression>
+                        </Expression>
+                        <Expression>  
+                          <SimpleExpression>
+                            <ValueExpression>
+                              <XPathQuery Type="UnsignedInteger">ProcessInformations/ProcessInformation[./ProcessName ='$Config/ProcessName$']/ActiveInstanceCount</XPathQuery>
+                            </ValueExpression>
+                            <Operator>LessEqual</Operator>
+                            <ValueExpression>
+                              <Value Type="UnsignedInteger">$Config/MaxProcessCount$</Value>
+                            </ValueExpression>
+                          </SimpleExpression>
+                        </Expression>
+                      </And>
+                    </Expression>
+                  </ConditionDetection>
+                  <ConditionDetection ID="CDProcessCountThresholdBreached" TypeID="System!System.ExpressionFilter">
+                    <Expression>
+                      <Not>
+                        <Expression>
+                          <And>
+                            <Expression>
+                              <Exists>
+                                <ValueExpression>
+                                  <XPathQuery Type="UnsignedInteger">ProcessInformations/ProcessInformation[./ProcessName ='$Config/ProcessName$']/ActiveInstanceCount</XPathQuery>
+                                </ValueExpression>
+                              </Exists>
+                            </Expression>
+                            <Expression>
+                              <SimpleExpression>
+                                <ValueExpression>
+                                  <XPathQuery Type="UnsignedInteger">ProcessInformations/ProcessInformation[./ProcessName ='$Config/ProcessName$']/ActiveInstanceCount</XPathQuery>
+                                </ValueExpression>
+                                <Operator>GreaterEqual</Operator>
+                                <ValueExpression>
+                                  <Value Type="UnsignedInteger">$Config/MinProcessCount$</Value>
+                                </ValueExpression>
+                              </SimpleExpression>
+                            </Expression>
+                            <Expression>  
+                              <SimpleExpression>
+                                <ValueExpression>
+                                  <XPathQuery Type="UnsignedInteger">ProcessInformations/ProcessInformation[./ProcessName ='$Config/ProcessName$']/ActiveInstanceCount</XPathQuery>
+                                </ValueExpression>
+                                <Operator>LessEqual</Operator>
+                                <ValueExpression>
+                                  <Value Type="UnsignedInteger">$Config/MaxProcessCount$</Value>
+                                </ValueExpression>
+                              </SimpleExpression>
+                            </Expression>
+                          </And>
+                        </Expression>
+                      </Not>
+                    </Expression>
+                    <SuppressionSettings>
+                      <MatchCount>$Config/MatchCount$</MatchCount>
+                    </SuppressionSettings>  
+                  </ConditionDetection>
+                </MemberModules>
+                <RegularDetections>
+                  <RegularDetection MonitorTypeStateID="ProcessCountThresholdBreached">
+                    <Node ID="CDProcessCountThresholdBreached">
+                      <Node ID="DS"/>
+                    </Node>
+                  </RegularDetection>
+                  <RegularDetection MonitorTypeStateID="ProcessCountWithinThresholds">
+                    <Node ID="CDProcessCountWithinThresholds">
+                      <Node ID="DS"/>
+                    </Node>
+                  </RegularDetection>
+                </RegularDetections>
+              </MonitorImplementation>
+            </UnitMonitorType>
+  </MonitorTypes>
+</TypeDefinitions>
+  <Monitoring>
+    <Discoveries>
+      <Discovery ID="NATI.test.ASD.Class.Discovery" Target="Windows!Microsoft.Windows.Server.OperatingSystem" Enabled="true" ConfirmDelivery="false" Remotable="true" Priority="Normal">
+        <Category>Discovery</Category>
+        <DiscoveryTypes>
+          <DiscoveryClass TypeID="NATI.test.ASD.Class"/>
+        </DiscoveryTypes>
+        <DataSource ID="DS" TypeID="Windows!Microsoft.Windows.FilteredRegistryDiscoveryProvider">
+          <ComputerName>$Target/Host/Property[Type="Windows!Microsoft.Windows.Computer"]/PrincipalName$</ComputerName>
+          <RegistryAttributeDefinitions>
+            <RegistryAttributeDefinition>
+              <AttributeName>ASDRegKeyExists</AttributeName>
+              <Path>SOFTWARE\Google</Path>
+              <PathType>0</PathType>
+              <AttributeType>0</AttributeType>
+            </RegistryAttributeDefinition>
+          </RegistryAttributeDefinitions>
+          <Frequency>86400</Frequency>
+          <ClassId>$MPElement[Name="NATI.test.ASD.Class"]$</ClassId>
+          <InstanceSettings>
+            <Settings>
+              <Setting>
+                <Name>$MPElement[Name="Windows!Microsoft.Windows.Computer"]/PrincipalName$</Name>
+                <Value>$Target/Host/Property[Type="Windows!Microsoft.Windows.Computer"]/PrincipalName$</Value>
+              </Setting>
+              <Setting>
+                <Name>$MPElement[Name="System!System.Entity"]/DisplayName$</Name>
+                <Value>NATI test</Value>
+              </Setting>
+            </Settings>
+          </InstanceSettings>
+          <Expression>
+            <SimpleExpression>
+              <ValueExpression>
+                <XPathQuery Type="Boolean">Values/ASDRegKeyExists</XPathQuery>
+              </ValueExpression>
+              <Operator>Equal</Operator>
+              <ValueExpression>
+                <Value Type="Boolean">true</Value>
+              </ValueExpression>
+            </SimpleExpression>
+          </Expression>
+        </DataSource>
+      </Discovery>
+    </Discoveries>
+    <Monitors>
+      <UnitMonitor ID="NATI.test.AS.Instance1.Service.Monitor" Accessibility="Public" Enabled="true" Target="NATI.test.ASD.Class" ParentMonitorID="Health!System.Health.AvailabilityState" Remotable="true" Priority="Normal" TypeID="Windows!Microsoft.Windows.CheckNTServiceStateMonitorType" ConfirmDelivery="false">
+        <Category>AvailabilityHealth</Category>
+        <AlertSettings AlertMessage="NATI.test.AS.Instance1.Service.Monitor.AlertMessage">
+          <AlertOnState>Warning</AlertOnState>
+          <AutoResolve>true</AutoResolve>
+          <AlertPriority>Normal</AlertPriority>
+          <AlertSeverity>Error</AlertSeverity>
+          <AlertParameters>
+            <AlertParameter1>$Data/Context/Property[@Name='Name']$</AlertParameter1>
+            <AlertParameter2>$Target/Host/Property[Type="Windows!Microsoft.Windows.Computer"]/PrincipalName$</AlertParameter2>
+          </AlertParameters>
+        </AlertSettings>
+        <OperationalStates>
+          <OperationalState ID="Running" MonitorTypeStateID="Running" HealthState="Success"/>
+          <OperationalState ID="NotRunning" MonitorTypeStateID="NotRunning" HealthState="Warning"/>
+        </OperationalStates>
+        <Configuration>
+          <ComputerName/>
+          <ServiceName>PlugPlay</ServiceName>
+          <CheckStartupType/>
+        </Configuration>
+      </UnitMonitor>
+    <UnitMonitor ID="NATI.test.DSF.Instance1.ProcessCount.Monitor" Accessibility="Public" Enabled="true" Target="NATI.test.ASD.Class" ParentMonitorID="Health!System.Health.AvailabilityState" Remotable="false" Priority="Normal" TypeID="NATI.test.DSF.Instance1.ProcessCount.MonitorType" ConfirmDelivery="false">
+        <Category>AvailabilityHealth</Category>
+        <AlertSettings AlertMessage="NATI.test.DSF.Instance1.ProcessCount.Monitor.AlertMessage">
+          <AlertOnState>Warning</AlertOnState>
+          <AutoResolve>true</AutoResolve>
+          <AlertPriority>Normal</AlertPriority>
+          <AlertSeverity>Warning</AlertSeverity>
+          <AlertParameters>
+            <AlertParameter1>$Data[Default='0']/Context/ProcessInformations/ProcessInformation[./ProcessName ='notepad.exe']/ActiveInstanceCount$</AlertParameter1>
+            <AlertParameter2>$Target/Host/Property[Type="Windows!Microsoft.Windows.Computer"]/PrincipalName$</AlertParameter2>
+          </AlertParameters>
+        </AlertSettings>
+        <OperationalStates>
+          <OperationalState ID="ProcessCountWithinThresholds" MonitorTypeStateID="ProcessCountWithinThresholds" HealthState="Success"/>
+          <OperationalState ID="ProcessCountThresholdBreached" MonitorTypeStateID="ProcessCountThresholdBreached" HealthState="Warning"/>
+        </OperationalStates>
+        <Configuration>
+          <ProcessName>notepad.exe</ProcessName>    
+          <FrequencySeconds>60</FrequencySeconds>
+          <MinProcessCount>1</MinProcessCount>
+          <MaxProcessCount>10</MaxProcessCount>  
+          <MatchCount>2</MatchCount>
+        </Configuration>
+      </UnitMonitor>
+</Monitors>
+  </Monitoring>
+  <Presentation>
+    <StringResources>
+      <StringResource ID="NATI.test.AS.Instance1.Service.Monitor.AlertMessage"/>
+    <StringResource ID="NATI.test.DSF.Instance1.ProcessCount.Monitor.AlertMessage"/>
+</StringResources>
+  </Presentation>
+  <LanguagePacks>
+    <LanguagePack ID="ENU" IsDefault="true">
+      <DisplayStrings>
+        <DisplayString ElementID="NATI.test.ASD.Class">
+          <Name>NATI test ASD Class</Name>
+        </DisplayString>
+        <DisplayString ElementID="NATI.test.ASD.Class.Discovery">
+          <Name>NATI test ASD Class Discovery</Name>
+        </DisplayString>
+        <DisplayString ElementID="NATI.test.AS.Instance1.Service.Monitor">
+          <Name>NATI test PlugPlay Service Monitor</Name>
+        </DisplayString>
+        <DisplayString ElementID="NATI.test.AS.Instance1.Service.Monitor" SubElementID="Running">
+          <Name>Running</Name>
+        </DisplayString>
+        <DisplayString ElementID="NATI.test.AS.Instance1.Service.Monitor" SubElementID="NotRunning">
+          <Name>Not Running</Name>
+        </DisplayString>
+        <DisplayString ElementID="NATI.test.AS.Instance1.Service.Monitor.AlertMessage">
+          <Name>test PlugPlay service is not running</Name>
+          <Description>Service {0} is not running on {1}</Description>
+        </DisplayString>
+      <DisplayString ElementID="NATI.test.DSF.Instance1.ProcessCount.Monitor">
+          <Name>NATI test notepad.exe Process Count Monitor</Name>
+        </DisplayString>
+<DisplayString ElementID="NATI.test.DSF.Instance1.ProcessCount.Monitor" SubElementID="ProcessCountWithinThresholds">
+            <Name>Process count within thresholds</Name>
+          </DisplayString>
+  <DisplayString ElementID="NATI.test.DSF.Instance1.ProcessCount.Monitor" SubElementID="ProcessCountThresholdBreached">
+              <Name>Process count threshold breached</Name>
+            </DisplayString>
+    <DisplayString ElementID="NATI.test.DSF.Instance1.ProcessCount.Monitor.AlertMessage">
+                <Name>test notepad.exe - Process count threshold has been breached.</Name>
+                <Description>The number of expected processes was less than or greater than the thresholds
+      Process name: (notepad.exe)
+      Process count found: {0} 
+      Computer: {1}</Description>
+              </DisplayString>
+    </DisplayStrings>
+        </LanguagePack>
+      </LanguagePacks>
+  </ManagementPack>
