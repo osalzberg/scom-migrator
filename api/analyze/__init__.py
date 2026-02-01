@@ -9,16 +9,32 @@ import sys
 import os
 
 # Add parent directory to path for imports
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+api_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, api_dir)
 
-from scom_migrator.parser import ManagementPackParser
-from scom_migrator.analyzer import MigrationAnalyzer
-from scom_migrator.generator import ARMTemplateGenerator
+try:
+    from scom_migrator.parser import ManagementPackParser
+    from scom_migrator.analyzer import MigrationAnalyzer
+    from scom_migrator.generator import ARMTemplateGenerator
+    IMPORT_ERROR = None
+except Exception as e:
+    IMPORT_ERROR = str(e)
+    ManagementPackParser = None
+    MigrationAnalyzer = None
+    ARMTemplateGenerator = None
 
 
 def main(req: func.HttpRequest) -> func.HttpResponse:
     """Analyze an uploaded management pack."""
     logging.info('Processing analyze request')
+    
+    # Check for import errors
+    if IMPORT_ERROR:
+        return func.HttpResponse(
+            json.dumps({'error': f'Import error: {IMPORT_ERROR}'}),
+            status_code=500,
+            mimetype='application/json'
+        )
     
     try:
         # Get the uploaded file
