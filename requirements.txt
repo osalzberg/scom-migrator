@@ -1,15 +1,14 @@
 # SCOM to Azure Monitor Migration Tool
 # Core dependencies
 
+# Web Server
+flask>=3.0.0
+gunicorn>=21.2.0
+jinja2>=3.1.0
+
 # XML parsing
 lxml>=4.9.0
 defusedxml>=0.7.1
-
-# Azure SDK
-azure-identity>=1.15.0
-azure-mgmt-monitor>=6.0.0
-azure-mgmt-resource>=23.0.0
-azure-mgmt-loganalytics>=13.0.0
 
 # CLI
 click>=8.1.0
