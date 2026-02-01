@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SCOM Tools by Oren Salzberg</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --azure-blue: #0078d4;
+            --azure-dark: #004578;
+            --azure-light: #50a0e0;
+            --success-green: #107c10;
+            --gradient-hero: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --gradient-azure: linear-gradient(135deg, #0078d4 0%, #004578 100%);
+            --gradient-purple: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            --card-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            --hover-shadow: 0 20px 60px rgba(0,0,0,0.15);
+        }
+        
+        * {
+            font-family: 'Inter', 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+        
+        body {
+            background: #f8fafc;
+            min-height: 100vh;
+        }
+        
+        /* Hero Section */
+        .hero-section {
+            background: var(--gradient-azure);
+            padding: 4rem 0;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .hero-section::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+            opacity: 0.5;
+        }
+        
+        .hero-content {
+            position: relative;
+            z-index: 1;
+        }
+        
+        .hero-title {
+            font-size: 2.5rem;
+            font-weight: 800;
+            color: white;
+            margin-bottom: 1rem;
+        }
+        
+        .hero-subtitle {
+            font-size: 1.2rem;
+            color: rgba(255,255,255,0.9);
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        
+        .author-badge {
+            display: inline-flex;
+            align-items: center;
+            background: rgba(255,255,255,0.15);
+            backdrop-filter: blur(10px);
+            padding: 0.75rem 1.5rem;
+            border-radius: 50px;
+            color: white;
+            margin-top: 1.5rem;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        
+        .author-badge .author-info {
+            text-align: left;
+        }
+        
+        .author-badge .author-name {
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+        
+        .author-badge .author-role {
+            font-size: 0.75rem;
+            opacity: 0.85;
+        }
+        
+        /* Tools Section */
+        .tools-section {
+            padding: 4rem 0;
+        }
+        
+        .section-title {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: #1e293b;
+            margin-bottom: 0.5rem;
+        }
+        
+        .section-subtitle {
+            color: #64748b;
+            margin-bottom: 3rem;
+        }
+        
+        /* Tool Cards */
+        .tool-card {
+            background: white;
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: var(--card-shadow);
+            transition: all 0.4s ease;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .tool-card:hover {
+            transform: translateY(-10px);
+            box-shadow: var(--hover-shadow);
+        }
+        
+        .tool-screenshot {
+            position: relative;
+            height: 220px;
+            overflow: hidden;
+            background: #e2e8f0;
+        }
+        
+        .tool-screenshot img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            object-position: top;
+            transition: transform 0.4s ease;
+        }
+        
+        .tool-card:hover .tool-screenshot img {
+            transform: scale(1.05);
+        }
+        
+        .tool-badge {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            background: var(--gradient-azure);
+            color: white;
+            padding: 0.4rem 1rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .tool-badge.new {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        }
+        
+        .tool-content {
+            padding: 1.5rem;
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .tool-icon {
+            width: 50px;
+            height: 50px;
+            background: var(--gradient-azure);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1rem;
+            font-size: 1.5rem;
+            color: white;
+        }
+        
+        .tool-title {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #1e293b;
+            margin-bottom: 0.5rem;
+        }
+        
+        .tool-description {
+            color: #64748b;
+            font-size: 0.95rem;
+            line-height: 1.6;
+            margin-bottom: 1rem;
+            flex-grow: 1;
+        }
+        
+        .tool-features {
+            list-style: none;
+            padding: 0;
+            margin: 0 0 1.5rem 0;
+        }
+        
+        .tool-features li {
+            display: flex;
+            align-items: center;
+            padding: 0.4rem 0;
+            font-size: 0.875rem;
+            color: #475569;
+        }
+        
+        .tool-features li i {
+            color: var(--success-green);
+            margin-right: 0.75rem;
+            font-size: 0.875rem;
+        }
+        
+        .tool-actions {
+            display: flex;
+            gap: 0.75rem;
+            margin-top: auto;
+        }
+        
+        .btn-tool-primary {
+            flex: 1;
+            background: var(--gradient-azure);
+            border: none;
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 10px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            text-align: center;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .btn-tool-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0,120,212,0.4);
+            color: white;
+        }
+        
+        .btn-tool-secondary {
+            background: #f1f5f9;
+            border: none;
+            color: #475569;
+            padding: 0.75rem 1rem;
+            border-radius: 10px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .btn-tool-secondary:hover {
+            background: #e2e8f0;
+            color: #1e293b;
+        }
+        
+        /* About Section */
+        .about-section {
+            background: white;
+            padding: 4rem 0;
+            border-top: 1px solid #e2e8f0;
+        }
+        
+        .about-card {
+            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+            border-radius: 20px;
+            padding: 2.5rem;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .about-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #1e293b;
+            margin-bottom: 1rem;
+        }
+        
+        .about-text {
+            color: #64748b;
+            line-height: 1.8;
+            margin-bottom: 1.5rem;
+        }
+        
+        .social-links {
+            display: flex;
+            gap: 1rem;
+        }
+        
+        .social-link {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.5rem 1rem;
+            background: white;
+            border-radius: 8px;
+            color: #475569;
+            text-decoration: none;
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .social-link:hover {
+            background: var(--azure-blue);
+            color: white;
+            border-color: var(--azure-blue);
+        }
+        
+        .social-link i {
+            margin-right: 0.5rem;
+        }
+        
+        /* Footer */
+        .footer {
+            background: #1e293b;
+            color: #94a3b8;
+            padding: 2rem 0;
+            text-align: center;
+        }
+        
+        .footer-disclaimer {
+            font-size: 0.75rem;
+            max-width: 800px;
+            margin: 0 auto;
+            line-height: 1.6;
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .hero-title {
+                font-size: 1.75rem;
+            }
+            
+            .hero-subtitle {
+                font-size: 1rem;
+            }
+            
+            .tool-screenshot {
+                height: 180px;
+            }
+            
+            .tool-actions {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Hero Section -->
+    <section class="hero-section text-center">
+        <div class="container hero-content">
+            <h1 class="hero-title">
+                <i class="bi bi-tools me-2"></i>
+                SCOM & Azure Monitor Tools
+            </h1>
+            <p class="hero-subtitle">
+                A collection of free tools to help IT professionals manage, migrate, and modernize 
+                their System Center Operations Manager environments
+            </p>
+            <div class="author-badge">
+                <div class="author-info">
+                    <div class="author-name">Created by Oren Salzberg</div>
+                    <div class="author-role">Product Manager, Microsoft Azure Log Analytics</div>
+                </div>
+            </div>
+        </div>
+    </section>
+    
+    <!-- Tools Section -->
+    <section class="tools-section">
+        <div class="container">
+            <div class="text-center mb-5">
+                <h2 class="section-title">Available Tools</h2>
+                <p class="section-subtitle">Click on any tool to get started</p>
+            </div>
+            
+            <div class="row g-4">
+                <!-- SCOM to Azure Monitor Migration Tool -->
+                <div class="col-lg-6">
+                    <div class="tool-card">
+                        <div class="tool-screenshot">
+                            <span class="tool-badge new">New</span>
+                            <img src="screenshots/migrator-screenshot.jpg" alt="SCOM Migrator Screenshot">
+                        </div>
+                        <div class="tool-content">
+                            <div class="tool-icon">
+                                <i class="bi bi-cloud-arrow-up"></i>
+                            </div>
+                            <h3 class="tool-title">SCOM to Azure Monitor Migration Tool</h3>
+                            <p class="tool-description">
+                                Automatically analyze your SCOM Management Packs and get detailed migration 
+                                recommendations for Azure Monitor. Generate ARM templates, KQL queries, and 
+                                Data Collection Rules.
+                            </p>
+                            <ul class="tool-features">
+                                <li><i class="bi bi-check-circle-fill"></i>Upload & analyze Management Pack XML files</li>
+                                <li><i class="bi bi-check-circle-fill"></i>Get complexity assessment & effort estimates</li>
+                                <li><i class="bi bi-check-circle-fill"></i>Generate ready-to-deploy ARM templates</li>
+                                <li><i class="bi bi-check-circle-fill"></i>Pre-built KQL queries for Log Analytics</li>
+                                <li><i class="bi bi-check-circle-fill"></i>Data Collection Rule configurations</li>
+                            </ul>
+                            <div class="tool-actions">
+                                <a href="index.html" class="btn-tool-primary">
+                                    <i class="bi bi-box-arrow-up-right me-2"></i>Launch Tool
+                                </a>
+                                <a href="https://github.com/osalzberg/scom-migrator" class="btn-tool-secondary" target="_blank">
+                                    <i class="bi bi-github"></i>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- SCOM MP Builder -->
+                <div class="col-lg-6">
+                    <div class="tool-card">
+                        <div class="tool-screenshot">
+                            <span class="tool-badge">Popular</span>
+                            <img src="screenshots/mpbuilder-screenshot.jpg" alt="MP Builder Screenshot">
+                        </div>
+                        <div class="tool-content">
+                            <div class="tool-icon" style="background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);">
+                                <i class="bi bi-box-seam"></i>
+                            </div>
+                            <h3 class="tool-title">SCOM Management Pack Builder</h3>
+                            <p class="tool-description">
+                                Build SCOM Management Packs with an intuitive UI - no XML editing required. 
+                                Create monitors, rules, discoveries, and more with a visual interface that 
+                                generates properly formatted MP files.
+                            </p>
+                            <ul class="tool-features">
+                                <li><i class="bi bi-check-circle-fill"></i>Visual UI for MP authoring</li>
+                                <li><i class="bi bi-check-circle-fill"></i>Create monitors, rules & discoveries</li>
+                                <li><i class="bi bi-check-circle-fill"></i>No XML knowledge required</li>
+                                <li><i class="bi bi-check-circle-fill"></i>Export valid Management Pack files</li>
+                                <li><i class="bi bi-check-circle-fill"></i>Built-in validation & testing</li>
+                            </ul>
+                            <div class="tool-actions">
+                                <a href="https://aka.ms/MPBuilder" class="btn-tool-primary" target="_blank">
+                                    <i class="bi bi-box-arrow-up-right me-2"></i>Launch Tool
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Coming Soon Section -->
+            <div class="text-center mt-5 pt-4">
+                <p class="text-muted">
+                    <i class="bi bi-lightbulb me-2"></i>
+                    Have a tool idea? <a href="https://www.linkedin.com/in/oren-salzberg-4b827b57/" target="_blank">Let me know!</a>
+                </p>
+            </div>
+        </div>
+    </section>
+    
+    <!-- About Section -->
+    <section class="about-section">
+        <div class="container">
+            <div class="row justify-content-center">
+                <div class="col-lg-8">
+                    <div class="about-card">
+                        <h3 class="about-title">
+                            <i class="bi bi-person-badge me-2 text-primary"></i>
+                            About the Author
+                        </h3>
+                        <p class="about-text">
+                            Hi, I'm <strong>Oren Salzberg</strong>, a Product Manager in the Microsoft Azure Log Analytics team. 
+                            With my background as a former SCOM Premier Field Engineer, I understand the challenges 
+                            IT professionals face when managing and modernizing their monitoring infrastructure.
+                        </p>
+                        <p class="about-text">
+                            These tools are passion projects built to help the SCOM community. They're free to use and 
+                            designed to make your life easier when working with Management Packs and planning migrations 
+                            to Azure Monitor.
+                        </p>
+                        <div class="social-links">
+                            <a href="https://www.linkedin.com/in/oren-salzberg-4b827b57/" target="_blank" class="social-link">
+                                <i class="bi bi-linkedin"></i>
+                                Connect on LinkedIn
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+    
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <p class="footer-disclaimer mb-3">
+                <strong>Disclaimer:</strong> These tools are provided as-is for informational and educational purposes. 
+                They are not officially supported or endorsed by Microsoft Corporation. Use at your own risk.
+            </p>
+            <p class="footer-disclaimer mb-0" style="font-size: 0.7rem;">
+                <strong>Trademarks:</strong> Microsoft, Azure, Azure Monitor, System Center Operations Manager (SCOM), 
+                and other product names are trademarks of Microsoft Corporation.
+            </p>
+        </div>
+    </footer>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
