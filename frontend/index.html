@@ -818,15 +818,19 @@
             
             // Recommendations
             const recsDiv = document.getElementById('recommendations');
-            recsDiv.innerHTML = data.overall_recommendations.map(rec => 
-                `<div class="mb-2"><i class="bi bi-arrow-right-circle me-2 text-primary"></i>${rec}</div>`
-            ).join('');
+            recsDiv.innerHTML = data.overall_recommendations
+                .filter(rec => rec && rec.trim())
+                .map(rec => 
+                    `<div class="mb-2"><i class="bi bi-arrow-right-circle me-2 text-primary"></i>${rec}</div>`
+                ).join('');
             
             // Prerequisites
             const prereqList = document.getElementById('prerequisites');
-            prereqList.innerHTML = data.prerequisites.slice(0, 10).map(p => 
-                `<li>${p}</li>`
-            ).join('');
+            prereqList.innerHTML = data.prerequisites.slice(0, 10)
+                .filter(p => p && p.trim())
+                .map(p => 
+                    `<li>${p}</li>`
+                ).join('');
             
             // Mappings - separate easy vs manual
             allMappings = data.mappings;
