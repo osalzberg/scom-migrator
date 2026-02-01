@@ -991,7 +991,36 @@
         function downloadArtifact(type) {
             if (!analysisResult) return;
             
-            window.location.href = `/api/download/${type}`;
+            let content, filename;
+            
+            if (type === 'arm') {
+                content = JSON.stringify(analysisResult._arm_template || {}, null, 2);
+                filename = 'azuredeploy.json';
+            } else if (type === 'dcr') {
+                content = JSON.stringify(analysisResult._dcr_template || {}, null, 2);
+                filename = 'data-collection-rules.json';
+            } else if (type === 'report') {
+                // Remove internal fields before exporting
+                const report = {...analysisResult};
+                delete report._arm_template;
+                delete report._dcr_template;
+                content = JSON.stringify(report, null, 2);
+                filename = 'migration-report.json';
+            } else {
+                alert('Unknown artifact type');
+                return;
+            }
+            
+            // Create and download the file
+            const blob = new Blob([content], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
         }
     </script>
 </body>
