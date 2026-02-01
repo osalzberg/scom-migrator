@@ -886,7 +886,7 @@
                     ${r.implementation_notes && showDetails ? `
                         <details class="mt-2">
                             <summary class="text-muted small"><strong>📋 Implementation Steps</strong></summary>
-                            <div class="mt-1 small bg-light p-2 rounded" style="white-space: pre-wrap;">${formatNotes(r.implementation_notes)}</div>
+                            <div class="mt-2 small p-3 rounded" style="background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border-left: 4px solid #0078d4;">${formatNotes(r.implementation_notes)}</div>
                         </details>
                     ` : ''}
                     ${r.kql_query && showDetails ? `
@@ -952,8 +952,33 @@
         
         function formatNotes(text) {
             if (!text) return '';
+            
+            // Escape HTML first
             var result = escapeHtml(text);
-            result = result.split('\\n').join('<br>');
+            
+            // Convert markdown-style formatting
+            // Headers: **text** -> bold
+            result = result.replace(/\*\*([^*]+)\*\*/g, '<strong class="text-primary">$1</strong>');
+            
+            // Numbered lists: "1. ", "2. " etc at start of line
+            result = result.replace(/^(\d+)\.\s+/gm, '<span class="badge bg-primary rounded-circle me-2">$1</span>');
+            
+            // Bullet points: "• " or "- " at start of line
+            result = result.replace(/^[•\-]\s+/gm, '<i class="bi bi-check-circle text-success me-2"></i>');
+            
+            // Code blocks: `code`
+            result = result.replace(/`([^`]+)`/g, '<code class="bg-dark text-light px-1 rounded">$1</code>');
+            
+            // Line breaks
+            result = result.replace(/\\n/g, '</div><div class="mt-2">');
+            result = result.replace(/\n/g, '</div><div class="mt-2">');
+            
+            // Wrap in container
+            result = '<div class="mt-2">' + result + '</div>';
+            
+            // Clean up empty divs
+            result = result.replace(/<div class="mt-2"><\/div>/g, '');
+            
             return result;
         }
         
