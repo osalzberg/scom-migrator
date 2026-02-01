@@ -7,11 +7,6 @@ This module provides serverless API endpoints for Static Web Apps.
 import azure.functions as func
 import json
 import logging
-import sys
-import os
-
-# Add the parent directory to path to import the scom_migrator modules
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from scom_migrator.parser import ManagementPackParser
 from scom_migrator.analyzer import MigrationAnalyzer
