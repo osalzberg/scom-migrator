@@ -293,7 +293,7 @@ class AzureMonitorMapper:
                         "3. **Send data to Log Analytics** custom table\n"
                         "4. **Use KQL queries** to analyze discovered resources\n\n"
                         f"Original WMI Query: `{discovery.data_source.wmi_query or 'Not specified'}`\n"
-                        f"WMI Namespace: `{discovery.data_source.wmi_namespace or 'root\\\\cimv2'}`"
+                        "WMI Namespace: `" + (discovery.data_source.wmi_namespace or 'root\\cimv2') + "`"
                     ),
                     complexity=MigrationComplexity.MODERATE,
                     confidence_score=0.75,
@@ -644,11 +644,12 @@ ConfigurationData
                 }
             }
             
+            counter_name = obj + "\\" + counter
             recommendations.append(AzureMonitorRecommendation(
                 target_type=AzureMonitorTargetType.METRIC_ALERT,
                 description=f"Create metric alert for {azure_metric}",
                 implementation_notes=(
-                    f"The SCOM performance counter '{obj}\\{counter}' maps to "
+                    f"The SCOM performance counter '{counter_name}' maps to "
                     f"Azure Monitor metric '{azure_metric}'. Create a metric alert rule "
                     "with the appropriate threshold."
                 ),
@@ -660,9 +661,10 @@ ConfigurationData
             # Need Log Analytics for this counter
             kql_query = self._generate_perf_kql(data_source)
             
+            counter_name = obj + "\\" + counter
             recommendations.append(AzureMonitorRecommendation(
                 target_type=AzureMonitorTargetType.LOG_ALERT,
-                description=f"Create log alert for performance counter {obj}\\{counter}",
+                description=f"Create log alert for performance counter {counter_name}",
                 implementation_notes=(
                     f"This performance counter requires collection via Data Collection Rule "
                     f"and a Log Analytics scheduled query alert."
