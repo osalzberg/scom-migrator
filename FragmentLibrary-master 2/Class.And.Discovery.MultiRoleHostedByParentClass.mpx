@@ -1,0 +1,120 @@
+﻿<ManagementPackFragment SchemaVersion="2.0" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+<!-- 
+%%
+Description:
+  Multiple CLASSES and DISCOVERIES and RELATIONSHIP and FOLDER and VIEWS and ROLLUP MONITORS based on an application with multiple sub roles
+  This is more of an example MP than a fragment.  It provides a structural example of a discovered parent class hosting multiple child role classes
+  This includes cascading discovery from the parent and rollup of health from the child classes
+  There are three different discovery examples used: WMI, Registry, and Script
+  CompanyID - is a short abbreviation for your company with NO SPACES OR SPECIAL CHARACTERS ALLOWED
+  AppName - is a short name for your app with NO SPACES OR SPECIAL CHARACTERS ALLOWED
+	
+Version: 1.2
+LastModified: 24-Feb-2022
+%%
+
+In this fragment you need to replace:
+  ##CompanyID##
+  ##AppName##
+
+This fragment depends on references:
+  RequiredReference: Alias="System", ID="System.Library"
+  RequiredReference: Alias="SC", ID="Microsoft.SystemCenter.Library"
+  RequiredReference: Alias="Windows", ID="Microsoft.Windows.Library"
+  RequiredReference: Alias="Health", ID="System.Health.Library"	  
+	
+@@Author=Kevin Holman@@
+-->
+  <TypeDefinitions>
+    <EntityTypes>
+      <ClassTypes>
+        <ClassType ID="##CompanyID##.##AppName##.Class" Accessibility="Public" Abstract="false" Base="Windows!Microsoft.Windows.LocalApplication" Hosted="true" Singleton="false" Extension="false" />
+		<!-- We choose Microsoft.Windows.LocalApplication as our generic base class for our hosting parent which must be discovered first in this example similar to a seed class -->	
+        <ClassType ID="##CompanyID##.##AppName##.Role.Class" Accessibility="Public" Abstract="true" Base="Windows!Microsoft.Windows.ApplicationComponent" Hosted="true" Singleton="false" Extension="false" />
+		<!-- We choose Microsoft.Windows.ApplicationComponent as our generic base class for the Abstract Role class to use as a base class only with no relationships or rollup by default -->			
+      </ClassTypes>
+      <RelationshipTypes>
+        <RelationshipType ID="##CompanyID##.##AppName##.Class.Hosts.##CompanyID##.##AppName##.Role.Class" Accessibility="Public" Abstract="false" Base="System!System.Hosting">
+          <Source ID="Source" Type="##CompanyID##.##AppName##.Class" />
+          <Target ID="Target" Type="##CompanyID##.##AppName##.Role.Class" />
+        </RelationshipType>
+      </RelationshipTypes>
+    </EntityTypes>
+  </TypeDefinitions>
+  <Monitoring>
+    <Discoveries>
+      <Discovery ID="##CompanyID##.##AppName##.Class.Discovery" Enabled="true" Target="Windows!Microsoft.Windows.Server.OperatingSystem" ConfirmDelivery="false" Remotable="false" Priority="Normal">
+        <Category>Discovery</Category>
+        <DiscoveryTypes>
+          <DiscoveryClass TypeID="##CompanyID##.##AppName##.Class" />
+        </DiscoveryTypes>
+        <DataSource ID="DS" TypeID="Windows!Microsoft.Windows.WmiProviderWithClassSnapshotDataMapper">
+          <NameSpace>root\cimv2</NameSpace>
+          <Query><![CDATA[SELECT Name FROM Win32_ServerFeature WHERE ID = 18]]></Query>
+          <!-- Example query here:  <Query><![CDATA[select * from Win32_Service where Name = 'spooler' and startmode = 'Manual']]></Query> -->
+          <Frequency>86397</Frequency>
+          <ClassId>$MPElement[Name="##CompanyID##.##AppName##.Class"]$</ClassId>
+          <InstanceSettings>
+            <Settings>
+              <Setting>
+                <Name>$MPElement[Name="Windows!Microsoft.Windows.Computer"]/PrincipalName$</Name>
+                <Value>$Target/Host/Property[Type="Windows!Microsoft.Windows.Computer"]/PrincipalName$</Value>
+              </Setting>
+              <Setting>
+                <Name>$MPElement[Name="System!System.Entity"]/DisplayName$</Name>
+                <Value>$Target/Host/Property[Type="Windows!Microsoft.Windows.Computer"]/PrincipalName$</Value>
+              </Setting>
+            </Settings>
+          </InstanceSettings>
+        </DataSource>
+      </Discovery>
+    </Discoveries>
+    <Monitors>
+      <DependencyMonitor ID="##CompanyID##.##AppName##.Role.Class.AvailabilityRollup.Monitor" Accessibility="Public" Enabled="true" Target="##CompanyID##.##AppName##.Class" ParentMonitorID="Health!System.Health.AvailabilityState" Remotable="true" Priority="Normal" RelationshipType="##CompanyID##.##AppName##.Class.Hosts.##CompanyID##.##AppName##.Role.Class" MemberMonitor="Health!System.Health.AvailabilityState">
+        <Category>Custom</Category>
+        <Algorithm>WorstOf</Algorithm>
+        <MemberUnAvailable>Error</MemberUnAvailable>
+      </DependencyMonitor>
+      <DependencyMonitor ID="##CompanyID##.##AppName##.Role.Class.ConfigurationRollup.Monitor" Accessibility="Public" Enabled="true" Target="##CompanyID##.##AppName##.Class" ParentMonitorID="Health!System.Health.ConfigurationState" Remotable="true" Priority="Normal" RelationshipType="##CompanyID##.##AppName##.Class.Hosts.##CompanyID##.##AppName##.Role.Class" MemberMonitor="Health!System.Health.ConfigurationState">
+        <Category>Custom</Category>
+        <Algorithm>WorstOf</Algorithm>
+        <MemberUnAvailable>Error</MemberUnAvailable>
+      </DependencyMonitor>
+      <DependencyMonitor ID="##CompanyID##.##AppName##.Role.Class.PerformanceStateRollup.Monitor" Accessibility="Public" Enabled="true" Target="##CompanyID##.##AppName##.Class" ParentMonitorID="Health!System.Health.PerformanceState" Remotable="true" Priority="Normal" RelationshipType="##CompanyID##.##AppName##.Class.Hosts.##CompanyID##.##AppName##.Role.Class" MemberMonitor="Health!System.Health.PerformanceState">
+        <Category>Custom</Category>
+        <Algorithm>WorstOf</Algorithm>
+        <MemberUnAvailable>Error</MemberUnAvailable>
+      </DependencyMonitor>
+    </Monitors>
+  </Monitoring>
+  <LanguagePacks>
+    <LanguagePack ID="ENU" IsDefault="true">
+      <DisplayStrings>
+        <DisplayString ElementID="##CompanyID##.##AppName##.Class">
+          <Name>##CompanyID## ##AppName## Class</Name>
+          <Description />
+        </DisplayString>
+        <DisplayString ElementID="##CompanyID##.##AppName##.Role.Class">
+          <Name>##CompanyID## ##AppName## Role Class</Name>
+          <Description />
+        </DisplayString>
+        <DisplayString ElementID="##CompanyID##.##AppName##.Class.Discovery">
+          <Name>##CompanyID## ##AppName## Class Discovery</Name>
+          <Description />
+        </DisplayString>
+        <DisplayString ElementID="##CompanyID##.##AppName##.Role.Class.AvailabilityRollup.Monitor">
+          <Name>##CompanyID## ##AppName## Role Availability Rollup Monitor</Name>
+          <Description />
+        </DisplayString>
+        <DisplayString ElementID="##CompanyID##.##AppName##.Role.Class.ConfigurationRollup.Monitor">
+          <Name>##CompanyID## ##AppName## Role Configuration Rollup Monitor</Name>
+          <Description />
+        </DisplayString>
+        <DisplayString ElementID="##CompanyID##.##AppName##.Role.Class.PerformanceStateRollup.Monitor">
+          <Name>##CompanyID## ##AppName## Role Performance Rollup Monitor</Name>
+          <Description />
+        </DisplayString>
+      </DisplayStrings>
+    </LanguagePack>
+  </LanguagePacks>
+</ManagementPackFragment>

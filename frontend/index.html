@@ -571,7 +571,7 @@
                                         </div>
                                     </div>
                                     <div class="row g-3">
-                                        <div class="col-md-4">
+                                        <div class="col-md-3">
                                             <div class="d-grid">
                                                 <button class="btn btn-outline-primary" onclick="downloadArtifact('arm')" title="Not fully tested - verify before use">
                                                     <i class="bi bi-filetype-json me-2"></i>ARM Template
@@ -579,7 +579,7 @@
                                                 </button>
                                             </div>
                                         </div>
-                                        <div class="col-md-4">
+                                        <div class="col-md-3">
                                             <div class="d-grid">
                                                 <button class="btn btn-outline-primary" onclick="downloadArtifact('report')" title="Not fully tested - verify before use">
                                                     <i class="bi bi-file-earmark-text me-2"></i>Full Report (JSON)
@@ -587,7 +587,15 @@
                                                 </button>
                                             </div>
                                         </div>
-                                        <div class="col-md-4">
+                                        <div class="col-md-3">
+                                            <div class="d-grid">
+                                                <button class="btn btn-outline-primary" onclick="downloadArtifact('csv')" title="Not fully tested - verify before use">
+                                                    <i class="bi bi-filetype-csv me-2"></i>CSV Export
+                                                    <span class="badge bg-warning text-dark ms-2" style="font-size: 0.65rem;">UNTESTED</span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3">
                                             <div class="d-grid">
                                                 <button class="btn btn-outline-primary" onclick="downloadArtifact('dcr')" title="Not fully tested - verify before use">
                                                     <i class="bi bi-gear me-2"></i>Data Collection Rules
@@ -1073,10 +1081,53 @@
             analysisResult = null;
         }
         
+        
+        function generateCSV() {
+            if (!analysisResult || !analysisResult.mappings) return '';
+            
+            const headers = [
+                'Source Type',
+                'Source Name', 
+                'Migration Complexity',
+                'Target Type',
+                'Description',
+                'KQL Query',
+                'Prerequisites',
+                'Limitations',
+                'Manual Steps'
+            ];
+            
+            const escapeCSV = (str) => {
+                if (str === null || str === undefined) return '';
+                str = String(str);
+                if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+                    return '"' + str.replace(/"/g, '""') + '"';
+                }
+                return str;
+            };
+            
+            const rows = analysisResult.mappings.map(m => {
+                const rec = m.recommendations && m.recommendations[0] ? m.recommendations[0] : {};
+                return [
+                    escapeCSV(m.source_type),
+                    escapeCSV(m.source_name),
+                    escapeCSV(m.migration_complexity),
+                    escapeCSV(rec.target_type || ''),
+                    escapeCSV(rec.description || ''),
+                    escapeCSV(rec.kql_query || ''),
+                    escapeCSV((rec.prerequisites || []).join('; ')),
+                    escapeCSV((m.limitations || []).join('; ')),
+                    escapeCSV((m.manual_steps || []).join('; '))
+                ].join(',');
+            });
+            
+            return headers.join(',') + '\n' + rows.join('\n');
+        }
+        
         function downloadArtifact(type) {
             if (!analysisResult) return;
             
-            let content, filename;
+            let content, filename, mimeType = 'application/json';
             
             if (type === 'arm') {
                 content = JSON.stringify(analysisResult._arm_template || {}, null, 2);
@@ -1091,13 +1142,17 @@
                 delete report._dcr_template;
                 content = JSON.stringify(report, null, 2);
                 filename = 'migration-report.json';
+            } else if (type === 'csv') {
+                content = generateCSV();
+                filename = 'migration-report.csv';
+                mimeType = 'text/csv';
             } else {
                 alert('Unknown artifact type');
                 return;
             }
             
             // Create and download the file
-            const blob = new Blob([content], {type: 'application/json'});
+            const blob = new Blob([content], {type: mimeType});
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
