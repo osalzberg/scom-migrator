@@ -413,17 +413,19 @@ Resources
                 "1. Go to Azure Portal → Monitor → Virtual Machines\n"
                 "2. Select your VMs and click 'Enable' under Insights\n"
                 "3. Choose your Log Analytics workspace\n"
-                "4. Install Azure Monitor Agent and Dependency Agent\n\n"
+                "4. Install Azure Monitor Agent\n\n"
                 "**For hybrid/on-premises servers:**\n"
                 "1. Enable Azure Arc on your servers first\n"
-                "2. Then enable VM Insights on the Arc-enabled servers"
+                "2. Then enable VM Insights on the Arc-enabled servers\n\n"
+                "**Cost Optimization:**\n"
+                "Consider using Basic or Auxiliary logs for high-volume data that doesn't need\n"
+                "real-time alerting to reduce ingestion costs."
             ),
             complexity=MigrationComplexity.SIMPLE,
             confidence_score=0.85,
             prerequisites=[
                 "Log Analytics workspace",
                 "Azure Monitor Agent on target VMs",
-                "Dependency Agent for Service Map",
                 "For on-premises: Azure Arc enabled servers",
             ],
             kql_query="""// Query discovered processes from VM Insights
@@ -763,9 +765,11 @@ ConfigurationData
                 "Script-based monitors have several migration paths:\n"
                 "1. **Azure Functions**: Run script logic and push custom metrics\n"
                 "2. **Azure Automation**: Schedule runbooks for periodic checks\n"
-                "3. **Log Analytics Agent**: Custom log collection\n"
+                "3. **Azure Monitor Agent with DCR**: Custom text log collection\n"
                 "4. **Azure Monitor custom metrics API**: Push metrics from any source\n\n"
-                f"Script name: {data_source.script_name or 'Embedded script'}"
+                f"Script name: {data_source.script_name or 'Embedded script'}\n\n"
+                "**Cost Optimization:**\n"
+                "Use Basic logs for script output data that doesn't require real-time alerting."
             ),
             complexity=MigrationComplexity.COMPLEX,
             confidence_score=0.5,
@@ -830,10 +834,10 @@ In Azure Monitor, use these approaches to target equivalent machines:
 - Place similar servers in same Resource Group
 - Alert scope: Select specific Resource Group
 
-**Option C: Dynamic Computer Groups in KQL**
-- Use Heartbeat table to identify machines
-- Filter by custom properties or tags
-- Example: `Heartbeat | where Computer in (dynamic_list)`
+**Option C: Data Collection Rules with Resource Targeting**
+- Create DCRs that target specific resources using Azure Resource Manager scopes
+- Use DCR associations to dynamically target VMs based on tags or resource groups
+- Example: Associate DCR with all VMs tagged 'Role=WebServer'
 
 **Migration Steps:**
 
@@ -919,7 +923,7 @@ In Azure Monitor, use these approaches to target equivalent machines:
                     f"   - Go to Azure Portal → Monitor → Virtual Machines\n"
                     f"   - Select your VM(s) → Click 'Enable' under Insights tab\n"
                     f"   - Choose Log Analytics workspace\n"
-                    f"   - Install Azure Monitor Agent + Dependency Agent\n\n"
+                    f"   - Install Azure Monitor Agent\n\n"
                     f"2. **Wait for data collection** (5-10 minutes after enabling)\n\n"
                     f"3. **Create Log Analytics Alert:**\n"
                     f"   - Go to Azure Portal → Monitor → Alerts → + Create → Alert rule\n"
@@ -931,13 +935,15 @@ In Azure Monitor, use these approaches to target equivalent machines:
                     f"   - Create/select Action Group for notifications\n\n"
                     f"4. **Test the alert:**\n"
                     f"   - Query VMProcess table to verify data is flowing\n"
-                    f"   - Optionally stop the {service_name} service to trigger alert"
+                    f"   - Optionally stop the {service_name} service to trigger alert\n\n"
+                    f"**Cost Optimization:**\n"
+                    f"Consider using Basic logs for VMProcess data if you don't need real-time alerting."
                 ),
                 complexity=MigrationComplexity.SIMPLE,
                 confidence_score=0.75,
                 prerequisites=[
                     "VM Insights enabled on target machines",
-                    "Dependency agent installed",
+                    "Azure Monitor Agent installed",
                     "Log Analytics workspace",
                 ],
                 kql_query=kql_query_vm_process,
@@ -980,9 +986,9 @@ Use the same targeting approaches as service monitors:
 - Place similar servers in same Resource Group
 - Alert scope: Select specific Resource Group
 
-**Option C: Dynamic Computer Groups in KQL**
-- Use Heartbeat table to identify machines
-- Filter by custom properties or tags
+**Option C: Data Collection Rules with Resource Targeting**
+- Create DCRs that target specific resources using Azure Resource Manager scopes
+- Use DCR associations to dynamically target VMs based on tags or resource groups
 
 **Migration Steps:**
 
@@ -990,7 +996,7 @@ Use the same targeting approaches as service monitors:
 1. Go to Azure Portal → Monitor → Virtual Machines
 2. Select your VM(s) → Click 'Enable' under Insights tab
 3. Choose Log Analytics workspace
-4. Install Azure Monitor Agent + Dependency Agent
+4. Install Azure Monitor Agent
 
 **Step 2: Wait for Data Collection**
 - Initial data collection takes 5-10 minutes
@@ -1026,6 +1032,10 @@ Use the same targeting approaches as service monitors:
 - No configuration needed - just enable it
 - Same alert creation process as services
 - Built-in process inventory
+
+**Cost Optimization:**
+- Consider using Basic logs for VMProcess data if real-time alerting is not required
+- Use Auxiliary logs for long-term retention of process inventory data
 """
 
         return [AzureMonitorRecommendation(
@@ -1036,7 +1046,7 @@ Use the same targeting approaches as service monitors:
             confidence_score=0.9,
             prerequisites=[
                 "VM Insights enabled on target machines",
-                "Dependency agent installed",
+                "Azure Monitor Agent installed",
                 "Log Analytics workspace",
             ],
             kql_query=kql_query,
@@ -1055,7 +1065,11 @@ Use the same targeting approaches as service monitors:
             implementation_notes=(
                 "Azure Monitor Agent supports custom text log collection. "
                 "Configure a Data Collection Rule with custom text log data source "
-                "pointing to the log file location."
+                "pointing to the log file location.\n\n"
+                "**Cost Optimization:**\n"
+                "- Use **Basic logs** for high-volume log data that doesn't require real-time alerting\n"
+                "- Use **Auxiliary logs** for compliance/archival data with infrequent access\n"
+                "- This can reduce ingestion costs by up to 80% compared to Analytics logs"
             ),
             complexity=MigrationComplexity.MODERATE,
             confidence_score=0.8,
