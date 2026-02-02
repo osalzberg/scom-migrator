@@ -953,8 +953,56 @@
         function formatNotes(text) {
             if (!text) return '';
             
-            // Escape HTML first
-            var result = escapeHtml(text);
+            // First, extract and protect code blocks (triple backticks or lines starting with //)
+            var codeBlocks = [];
+            var result = text;
+            
+            // Handle triple backtick code blocks
+            result = result.replace(/```([\s\S]*?)```/g, function(match, code) {
+                var index = codeBlocks.length;
+                codeBlocks.push(code.trim());
+                return '%%CODEBLOCK' + index + '%%';
+            });
+            
+            // Handle lines that look like code (starting with // or | or contain KQL-like syntax)
+            var lines = result.split(/\\n|\n/);
+            var inCodeBlock = false;
+            var codeBuffer = [];
+            var processedLines = [];
+            
+            for (var i = 0; i < lines.length; i++) {
+                var line = lines[i].trim();
+                var isCodeLine = line.startsWith('//') || 
+                                 line.startsWith('|') || 
+                                 line.match(/^(where|summarize|project|extend|join|let|ConfigurationChange|Perf|Event|Heartbeat)\s/i) ||
+                                 (inCodeBlock && line.length > 0 && !line.match(/^\d+\.\s/) && !line.startsWith('**'));
+                
+                if (isCodeLine) {
+                    inCodeBlock = true;
+                    codeBuffer.push(lines[i]);
+                } else {
+                    if (codeBuffer.length > 0) {
+                        var index = codeBlocks.length;
+                        codeBlocks.push(codeBuffer.join('\n'));
+                        processedLines.push('%%CODEBLOCK' + index + '%%');
+                        codeBuffer = [];
+                        inCodeBlock = false;
+                    }
+                    processedLines.push(lines[i]);
+                }
+            }
+            
+            // Don't forget remaining code buffer
+            if (codeBuffer.length > 0) {
+                var index = codeBlocks.length;
+                codeBlocks.push(codeBuffer.join('\n'));
+                processedLines.push('%%CODEBLOCK' + index + '%%');
+            }
+            
+            result = processedLines.join('\n');
+            
+            // Escape HTML
+            result = escapeHtml(result);
             
             // Convert markdown-style formatting
             // Headers: **text** -> bold
@@ -966,12 +1014,20 @@
             // Bullet points: "• " or "- " at start of line
             result = result.replace(/^[•\-]\s+/gm, '<i class="bi bi-check-circle text-success me-2"></i>');
             
-            // Code blocks: `code`
+            // Inline code: `code`
             result = result.replace(/`([^`]+)`/g, '<code class="bg-dark text-light px-1 rounded">$1</code>');
             
             // Line breaks
             result = result.replace(/\\n/g, '</div><div class="mt-2">');
             result = result.replace(/\n/g, '</div><div class="mt-2">');
+            
+            // Restore code blocks with proper formatting
+            for (var i = 0; i < codeBlocks.length; i++) {
+                var codeHtml = '<div class="mt-2 mb-2"><pre class="p-3 rounded" style="background: #1e1e1e; color: #d4d4d4; font-family: \'Cascadia Code\', \'Fira Code\', Consolas, monospace; font-size: 0.8rem; overflow-x: auto; white-space: pre-wrap; word-wrap: break-word;"><code>' + 
+                    escapeHtml(codeBlocks[i]) + 
+                    '</code></pre></div>';
+                result = result.replace('%%CODEBLOCK' + i + '%%', codeHtml);
+            }
             
             // Wrap in container
             result = '<div class="mt-2">' + result + '</div>';
