@@ -562,7 +562,7 @@ class ManagementPackParser:
         discovery_ids_seen = set()
         discovery_elements = []
         for elem in self._findall(".//Discovery"):
-            elem_id = elem.get("ID") or elem.get(f"{{{self.ns.get('', '')}}}ID") if self.ns else elem.get("ID")
+            elem_id = elem.get("ID")
             if elem_id and elem_id not in discovery_ids_seen:
                 discovery_ids_seen.add(elem_id)
                 discovery_elements.append(elem)
