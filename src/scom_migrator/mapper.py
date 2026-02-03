@@ -113,7 +113,7 @@ class AzureMonitorMapper:
         elif monitor.monitor_type == MonitorType.DEPENDENCY_MONITOR:
             recommendations.append(AzureMonitorRecommendation(
                 target_type=AzureMonitorTargetType.VM_INSIGHTS,
-                description="Use VM Insights dependency mapping",
+                description="Use VM Insights for performance monitoring",
                 implementation_notes=(
                     "Azure VM Insights provides dependency mapping through the Service Map feature. "
                     "Enable VM Insights on your VMs to automatically discover and map dependencies."
@@ -401,13 +401,13 @@ Resources
         # VM Insights for dependency discovery
         recommendations.append(AzureMonitorRecommendation(
             target_type=AzureMonitorTargetType.VM_INSIGHTS,
-            description="Use VM Insights for automatic VM discovery and dependency mapping",
+            description="Use VM Insights for automatic VM performance monitoring",
             implementation_notes=(
                 "**VM Insights - For automatic discovery and dependency mapping:**\n\n"
                 "VM Insights automatically discovers:\n"
-                "- Running processes on VMs\n"
-                "- Network connections between machines\n"
-                "- Application dependencies\n"
+                "- VM performance metrics\n"
+                "- VM availability and heartbeat\n"
+                "- Resource utilization\n"
                 "- Performance data\n\n"
                 "**How to enable VM Insights:**\n"
                 "1. Go to Azure Portal → Monitor → Virtual Machines\n"
@@ -428,17 +428,18 @@ Resources
                 "Azure Monitor Agent on target VMs",
                 "For on-premises: Azure Arc enabled servers",
             ],
-            kql_query="""// Query discovered processes from VM Insights
-VMProcess
+            kql_query="""// Query VM performance and health (Azure Monitor Agent - no Dependency Agent needed)
+InsightsMetrics
 | where TimeGenerated > ago(1h)
-| summarize by Computer, ExecutableName, DisplayName
-| order by Computer, ExecutableName
+| where Origin == "vm.azm.ms"
+| summarize AvgValue = avg(Val) by Computer, Name, bin(TimeGenerated, 5m)
+| order by Computer, Name
 
-// Query network connections/dependencies
-VMConnection
+// Query VM heartbeat/availability
+Heartbeat
 | where TimeGenerated > ago(1h)
-| summarize ConnectionCount=count() by SourceIp, DestinationIp, DestinationPort
-| order by ConnectionCount desc""",
+| summarize LastHeartbeat = max(TimeGenerated) by Computer
+| order by LastHeartbeat desc""",
         ))
         
         # Change Tracking for software inventory
@@ -526,8 +527,8 @@ CustomDiscovery_CL
 | project TimeGenerated, Computer, DiscoveredProperties
 | order by TimeGenerated desc
 
-// Alternative: Use VM Insights for process discovery
-VMProcess
+// Alternative: Use Event Log for process monitoring (no Dependency Agent needed)
+Perf
 | where TimeGenerated > ago(1h)
 | summarize by Computer, ExecutableName, DisplayName"""
         
@@ -535,8 +536,8 @@ VMProcess
 // Use Azure Resource Graph for Azure resources:
 // Resources | where type =~ 'microsoft.compute/virtualmachines'
 
-// Use VM Insights for process/connection discovery:
-VMProcess
+// Use Event Log and Perf counters for monitoring (no Dependency Agent needed):
+Perf
 | where TimeGenerated > ago(1h)
 | summarize by Computer, ExecutableName
 
@@ -809,12 +810,24 @@ Event
 | project TimeGenerated, Computer, RenderedDescription, EventID
 | order by TimeGenerated desc"""
 
-        kql_query_vm_process = f"""// Monitor {service_name} service process
-VMProcess
+        kql_query_vm_process = f"""// Monitor {service_name} service via Heartbeat and Perf (Azure Monitor Agent only)
+// Use Heartbeat to verify VM is online
+Heartbeat
 | where TimeGenerated > ago(5m)
-| where ProcessName contains "{service_name}"
-| summarize ServiceInstances = dcount(Computer) by bin(TimeGenerated, 5m)
-| where ServiceInstances == 0  // Alert when no instances found"""
+| where Computer in (
+    // List expected computers running this service
+    Heartbeat | where TimeGenerated > ago(1d) | distinct Computer
+)
+| summarize LastHeartbeat = max(TimeGenerated) by Computer
+| where LastHeartbeat < ago(5m)  // Alert if no heartbeat in 5 min
+
+// Alternative: Monitor via Windows Event Log for service state
+Event
+| where TimeGenerated > ago(5m)
+| where EventLog == "System"
+| where Source == "Service Control Manager"
+| where RenderedDescription contains "{service_name}"
+| project TimeGenerated, Computer, RenderedDescription"""
 
         # Build implementation notes with service-specific details
         implementation_notes = f"""**Monitor Windows Service: {service_name}**
@@ -917,7 +930,7 @@ In Azure Monitor, use these approaches to target equivalent machines:
                 implementation_notes=(
                     f"**VM Insights process monitoring for {service_name}:**\n\n"
                     f"**Step-by-Step Setup:**\n\n"
-                    f"1. **Enable VM Insights:**\n"
+                    f"1. **Enable Azure Monitor Agent:**\n"
                     f"   - Go to Azure Portal → Monitor → Virtual Machines\n"
                     f"   - Select your VM(s) → Click 'Enable' under Insights tab\n"
                     f"   - Choose Log Analytics workspace\n"
@@ -932,10 +945,10 @@ In Azure Monitor, use these approaches to target equivalent machines:
                     f"   - Evaluation frequency: Every 5 minutes\n"
                     f"   - Create/select Action Group for notifications\n\n"
                     f"4. **Test the alert:**\n"
-                    f"   - Query VMProcess table to verify data is flowing\n"
+                    f"   - Query Heartbeat and Event tables to verify data is flowing\n"
                     f"   - Optionally stop the {service_name} service to trigger alert\n\n"
                     f"**Cost Optimization:**\n"
-                    f"Consider using Basic logs for VMProcess data if you don't need real-time alerting."
+                    f"Consider using Basic logs for high-volume data if you don't need real-time alerting."
                 ),
                 complexity=MigrationComplexity.SIMPLE,
                 confidence_score=0.75,
@@ -959,13 +972,20 @@ In Azure Monitor, use these approaches to target equivalent machines:
         process_name = name.split()[-1] if name else "YourProcess.exe"
         
         # Generate KQL query for process monitoring
-        kql_query = f"""// Monitor {process_name} process
-VMProcess
+        kql_query = f"""// Monitor {process_name} process using Event Log (Azure Monitor Agent only)
+// Option 1: Monitor process start/stop via Security or System events
+Event
 | where TimeGenerated > ago(5m)
-| where ExecutableName =~ "{process_name}" or ProcessName =~ "{process_name}"
-| summarize ProcessCount = dcount(Computer) by bin(TimeGenerated, 5m)
-| where ProcessCount == 0  // Alert when process not found on any machine
-| project TimeGenerated, ProcessCount"""
+| where EventLog == "Security" or EventLog == "System"
+| where RenderedDescription contains "{process_name}"
+| project TimeGenerated, Computer, EventLog, EventID, RenderedDescription
+
+// Option 2: Monitor via performance counters (if process has perf counters)
+Perf
+| where TimeGenerated > ago(5m)
+| where ObjectName == "Process"
+| where InstanceName =~ "{process_name}"
+| summarize AvgCPU = avg(CounterValue) by Computer, InstanceName, bin(TimeGenerated, 5m)"""
 
         implementation_notes = f"""**Monitor Process: {process_name}**
 
@@ -1006,7 +1026,7 @@ Use the same targeting approaches as service monitors:
 4. **Paste KQL query** (provided below)
 5. **Modify for targeting specific machines:**
    ```kql
-   VMProcess
+   Perf
    | where ExecutableName =~ "{process_name}"
    // TARGET FILTERING - Choose one:
    | where Computer has "appserver"  // Hostname pattern
@@ -1020,7 +1040,7 @@ Use the same targeting approaches as service monitors:
 8. Create/select **Action Group** for notifications
 
 **Step 4: Test the Alert**
-1. Query VMProcess table to verify data flows
+1. Query Perf table to verify data flows
 2. Stop the process on a test machine
 3. Wait 5-10 minutes for alert to trigger
 
@@ -1031,7 +1051,7 @@ Use the same targeting approaches as service monitors:
 - Built-in process inventory
 
 **Cost Optimization:**
-- Consider using Basic logs for VMProcess data if real-time alerting is not required
+- Consider using Basic logs for Perf data if real-time alerting is not required
 - Use Auxiliary logs for long-term retention of process inventory data
 """
 
