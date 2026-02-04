@@ -316,32 +316,52 @@ class AzureMonitorMapper:
                 
             elif ds_type == DataSourceType.REGISTRY:
                 recommendations.append(AzureMonitorRecommendation(
-                    target_type=AzureMonitorTargetType.LOG_ALERT,
-                    description="Use Change Tracking and Inventory for registry-based discovery",
+                    target_type=AzureMonitorTargetType.DATA_COLLECTION_RULE,
+                    description="Monitor registry keys via Azure Monitor Agent custom script",
                     implementation_notes=(
                         "**How to migrate Registry-based discovery to Azure:**\n\n"
-                        "1. **Enable Change Tracking and Inventory** solution in your Log Analytics workspace\n"
-                        "2. **Configure Registry tracking** in the Change Tracking settings\n"
-                        "3. **Add the specific registry paths** you want to monitor\n"
-                        "4. **Query ConfigurationData** table for inventory data\n\n"
-                        "**Azure Portal Steps:**\n"
-                        "- Go to Automation Account → Change tracking → Edit Settings\n"
-                        "- Under Windows Registry, add the registry keys to track\n"
-                        "- Set collection frequency (recommended: every 1-6 hours)"
+                        "⚠️ **Note:** Change Tracking via Automation Accounts is deprecated.\n\n"
+                        "**Modern Approach: PowerShell Script + DCR**\n"
+                        "1. Create PowerShell script to query registry:\n"
+                        "   ```powershell\n"
+                        "   $regValue = Get-ItemProperty -Path 'HKLM:\\Your\\Path' -ErrorAction SilentlyContinue\n"
+                        "   $result = [PSCustomObject]@{\n"
+                        "       TimeGenerated = Get-Date\n"
+                        "       Computer = $env:COMPUTERNAME\n"
+                        "       RegistryKey = 'HKLM:\\Your\\Path'\n"
+                        "       ValueName = 'YourValue'\n"
+                        "       ValueData = $regValue.YourValue\n"
+                        "   }\n"
+                        "   # Output to file for DCR collection\n"
+                        "   $result | ConvertTo-Json | Out-File C:\\Logs\\registry.json -Append\n"
+                        "   ```\n\n"
+                        "2. Schedule script via Task Scheduler or Azure Automation\n"
+                        "3. Create DCR to collect the JSON log file\n"
+                        "4. Data flows to custom table in Log Analytics\n\n"
+                        "**Alternative: Use Registry monitoring in Azure Policy Guest Configuration**\n"
+                        "- Define desired registry state in Policy\n"
+                        "- Compliance data automatically collected\n"
+                        "- Query GuestConfigurationResources table"
                     ),
-                    complexity=MigrationComplexity.SIMPLE,
-                    confidence_score=0.85,
+                    complexity=MigrationComplexity.MODERATE,
+                    confidence_score=0.75,
                     prerequisites=[
-                        "Azure Automation Account",
-                        "Change Tracking and Inventory solution enabled",
+                        "Azure Monitor Agent installed",
+                        "Custom PowerShell script for registry monitoring",
+                        "DCR for custom log collection OR Azure Policy Guest Configuration",
                         "Log Analytics workspace",
                     ],
-                    kql_query="""// Query registry inventory data
-ConfigurationData
-| where ConfigDataType == "Registry"
+                    kql_query="""// Query custom registry monitoring data
+RegistryMonitoring_CL
 | where TimeGenerated > ago(24h)
 | project TimeGenerated, Computer, RegistryKey, ValueName, ValueData
-| order by TimeGenerated desc""",
+| order by TimeGenerated desc
+
+// Alternative: Use Azure Policy Guest Configuration compliance data
+GuestConfigurationResources
+| where type == "Microsoft.GuestConfiguration/guestConfigurationAssignments/reports"
+| where properties.complianceStatus == "NonCompliant"
+| project TimeGenerated, Computer = split(id, '/')[8], ComplianceReason = properties.complianceReasons""",
                 ))
                 complexity = MigrationComplexity.SIMPLE
                 
@@ -453,46 +473,52 @@ Heartbeat
 | order by LastHeartbeat desc""",
         ))
         
-        # Change Tracking for software inventory
+        # Azure Monitor Agent for software and service inventory
         recommendations.append(AzureMonitorRecommendation(
-            target_type=AzureMonitorTargetType.LOG_ANALYTICS_QUERY,
-            description="Use Change Tracking for software and service inventory",
+            target_type=AzureMonitorTargetType.DATA_COLLECTION_RULE,
+            description="Use Azure Monitor Agent for software and service inventory",
             implementation_notes=(
-                "**Change Tracking and Inventory - For software/service discovery:**\n\n"
-                "Change Tracking automatically collects:\n"
-                "- Installed software and versions\n"
-                "- Windows Services and their state\n"
-                "- Windows Registry keys\n"
-                "- Linux daemons\n"
-                "- File changes\n\n"
-                "**How to enable:**\n"
-                "1. Create an Azure Automation Account\n"
-                "2. Go to Automation Account → Change tracking\n"
-                "3. Add machines (Azure VMs or Arc-enabled servers)\n"
-                "4. Configure what to track in Settings\n\n"
-                "**Query inventory data:**\n"
-                "Use the ConfigurationData and ConfigurationChange tables"
+                "**Modern Inventory Collection via Azure Monitor Agent:**\n\n"
+                "⚠️ **Note:** Change Tracking via Automation Accounts is being deprecated.\n"
+                "Use these modern alternatives:\n\n"
+                "**Option 1: VM Insights (Recommended for Services)**\n"
+                "- Automatically collects running process/service inventory\n"
+                "- Uses InsightsMetrics and VMProcess tables\n"
+                "- No configuration needed - enable VM Insights\n\n"
+                "**Option 2: Custom Script via Azure Automation**\n"
+                "- Create PowerShell runbook to collect inventory\n"
+                "- Use `Send-AzMonitorCustomLog` to send to Log Analytics\n"
+                "- Schedule to run periodically\n\n"
+                "**Option 3: Microsoft Defender for Cloud**\n"
+                "- Provides software inventory automatically\n"
+                "- Uses SecurityResources table in Azure Resource Graph\n"
+                "- No DCR needed\n\n"
+                "**Example PowerShell for custom inventory:**\n"
+                "```powershell\n"
+                "$services = Get-Service | Select-Object Name, DisplayName, Status, StartType\n"
+                "$software = Get-ItemProperty HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*\n"
+                "# Send to Log Analytics using HTTP Data Collector API or custom table DCR\n"
+                "```"
             ),
-            complexity=MigrationComplexity.SIMPLE,
+            complexity=MigrationComplexity.MODERATE,
             confidence_score=0.8,
             prerequisites=[
-                "Azure Automation Account",
+                "Azure Monitor Agent on target VMs",
                 "Log Analytics workspace",
-                "Change Tracking solution enabled",
+                "Choose: VM Insights, Azure Automation, or Defender for Cloud",
             ],
-            kql_query="""// Software inventory
-ConfigurationData
-| where ConfigDataType == "Software"
-| where TimeGenerated > ago(7d)
-| summarize arg_max(TimeGenerated, *) by SoftwareName, Computer
-| project Computer, SoftwareName, CurrentVersion, Publisher
-
-// Windows Services inventory
-ConfigurationData
-| where ConfigDataType == "WindowsServices"
+            kql_query="""// Service inventory via VM Insights
+VMProcess
 | where TimeGenerated > ago(1d)
-| summarize arg_max(TimeGenerated, *) by SvcName, Computer
-| project Computer, SvcName, SvcDisplayName, SvcState, SvcStartupType""",
+| where ProcessName has "svc" or DisplayName has "service"
+| summarize arg_max(TimeGenerated, *) by Computer, ProcessName
+| project Computer, ProcessName, DisplayName, ExecutablePath, CompanyName
+
+// Alternative: Query services via custom collection
+CustomServiceInventory_CL
+| where TimeGenerated > ago(1d)
+| summarize arg_max(TimeGenerated, *) by ServiceName, Computer
+| project Computer, ServiceName, ServiceDisplayName, ServiceState, StartupType""",
         ))
         
         limitations.append(
@@ -843,25 +869,21 @@ ConfigurationData
         """Map Windows service monitoring to Azure Monitor."""
         service_name = data_source.service_name or "YourServiceName"
         
-        # Generate specific KQL query with the actual service name
-        kql_query_change_tracking = f"""// Monitor {service_name} service state changes
-ConfigurationChange
-| where ConfigChangeType == "WindowsServices"
-| where SvcName == "{service_name}"
-| where SvcState == "Stopped"
-| where SvcPreviousState == "Running"
-| project TimeGenerated, Computer, SvcName, SvcDisplayName, SvcState, SvcStartupType
-| order by TimeGenerated desc"""
-
-        kql_query_event_log = f"""// Monitor {service_name} service via Event Log (Event ID 7036)
+        # Generate specific KQL query with the actual service name - Modern approach using Event ID 7036
+        kql_query_event_log = f"""// Monitor {service_name} service via Event ID 7036 (Service Control Manager)
+// This is the MODERN RECOMMENDED approach for service monitoring
 Event
+| where TimeGenerated > ago(5m)
 | where EventLog == "System"
 | where Source == "Service Control Manager"
 | where EventID == 7036
 | where RenderedDescription contains "{service_name}"
-| where RenderedDescription contains "stopped"
-| project TimeGenerated, Computer, RenderedDescription, EventID
-| order by TimeGenerated desc"""
+| where RenderedDescription contains "stopped" or RenderedDescription contains "terminated"
+| project TimeGenerated, Computer, RenderedDescription, EventID, ParameterXml
+| order by TimeGenerated desc
+
+// For targeting specific VMs, add:
+// | join kind=inner (Heartbeat | where Tags contains "Role=YourRole" | distinct Computer) on Computer"""
 
         kql_query_vm_process = f"""// Monitor {service_name} service via Heartbeat and Perf (Azure Monitor Agent only)
 // Use Heartbeat to verify VM is online
@@ -965,18 +987,22 @@ ConfigurationChange
 
 **Migration Steps:**
 
-**Step 1: Change Tracking (Recommended)**
-1. Enable Change Tracking in Log Analytics workspace
-2. Go to Automation Account → Change tracking → Edit Settings
-3. Under Windows Services, add "{service_name}" to track
-4. **Create DCR association** to target specific VMs (see targeting patterns above)
+**Step 1: Create Data Collection Rule**
+1. Go to Azure Portal → Monitor → Data Collection Rules → + Create
+2. Configure data source:
+   - Type: Windows Event Logs
+   - Event Log: System
+   - XPath Query: `System!*[System[Provider[@Name='Service Control Manager'] and (EventID=7036)]]`
+3. Configure destination:
+   - Log Analytics workspace
+   - Table: Event
+   - **Table Mode: Analytics** (service events are low volume, need real-time)
+4. Save the DCR
 
-**💰 Cost Optimization:**
-- Use **Analytics logs** for ConfigurationChange table (real-time alerting needed)
-- Use **Basic logs** ($0.50/GB) for ConfigurationData table (inventory queries)
-- Savings: ~70% cost reduction for service inventory data
+**Step 2: Associate DCR with Target VMs**
+Choose one of the targeting patterns from above (tag-based, resource group, or Azure Policy)
 
-**Step 2: Create Alert with Targeting**
+**Step 3: Create Alert Rule with Targeting**
 1. Go to Azure Portal → Monitor → Alerts → + Create → Alert rule
 2. **Scope**: Select Log Analytics workspace
 3. **Condition**: Custom log search with KQL query (provided below)
@@ -1003,40 +1029,71 @@ ConfigurationChange
 
         recommendations = [
             AzureMonitorRecommendation(
-                target_type=AzureMonitorTargetType.LOG_ALERT,
-                description=f"Monitor {service_name} service via Change Tracking",
-                implementation_notes=implementation_notes,
-                complexity=MigrationComplexity.SIMPLE,
-                confidence_score=0.9,
-                prerequisites=[
-                    "Azure Automation Account",
-                    "Enable Change Tracking and Inventory solution",
-                    f"Configure tracking for {service_name} service",
-                    "Log Analytics workspace",
-                ],
-                kql_query=kql_query_change_tracking,
-            ),
-            AzureMonitorRecommendation(
                 target_type=AzureMonitorTargetType.DATA_COLLECTION_RULE,
-                description=f"Monitor {service_name} via System Event Log (Event ID 7036)",
+                description=f"Monitor {service_name} service via System Event Log (Event ID 7036) - RECOMMENDED",
                 implementation_notes=(
-                    f"**Alternative approach using Windows Event Logs:**\n\n"
+                    f"**Modern Service Monitoring via Azure Monitor Agent:**\n\n"
                     f"Collect Service Control Manager events (Event ID 7036) that track all service state changes.\n"
                     f"Filter for '{service_name}' service specifically in your alert query.\n\n"
-                    f"**DCR Configuration:**\n"
-                    f"- Event Log: System\n"
-                    f"- Event IDs: 7036 (Service state change)\n"
-                    f"- Source: Service Control Manager\n\n"
-                    f"This method provides real-time service monitoring without Change Tracking dependency."
+                    f"**DCR Configuration Steps:**\n"
+                    f"1. Create Data Collection Rule for System event log\n"
+                    f"2. XPath Query: `System!*[System[Provider[@Name='Service Control Manager'] and (EventID=7036)]]`\n"
+                    f"3. Associate DCR with target VMs (see targeting patterns above)\n"
+                    f"4. Data flows to Event table in Log Analytics\n\n"
+                    f"**💰 Cost Optimization:**\n"
+                    f"- Use **Analytics logs** for Event table (real-time alerting needed for services)\n"
+                    f"- Service state changes are typically low volume (<1 GB/day)\n\n"
+                    f"**Why Event ID 7036:**\n"
+                    f"- Logs ALL service state changes (start, stop, pause, continue)\n"
+                    f"- Real-time notification\n"
+                    f"- No dependency on deprecated Change Tracking solution\n"
+                    f"- Works with Azure Monitor Agent only"
                 ),
                 complexity=MigrationComplexity.SIMPLE,
-                confidence_score=0.85,
+                confidence_score=0.95,
                 prerequisites=[
                     "Azure Monitor Agent on target machines",
-                    "Data Collection Rule for System event log",
+                    "Data Collection Rule for System event log (Event ID 7036)",
                     "Log Analytics workspace",
+                    "DCR associations for targeting (replaces Computer Groups)",
                 ],
                 kql_query=kql_query_event_log,
+            ),
+            AzureMonitorRecommendation(
+                target_type=AzureMonitorTargetType.LOG_ALERT,
+                description=f"Monitor {service_name} service via custom PowerShell script (Alternative)",
+                implementation_notes=(
+                    f"**Alternative: Custom Service Monitoring Script:**\n\n"
+                    f"If you need more control than Event ID 7036 provides, use a custom PowerShell script:\n\n"
+                    f"**Option A: Azure Automation Runbook**\n"
+                    f"1. Create PowerShell runbook that queries service state\n"
+                    f"2. Write results to Log Analytics custom table\n"
+                    f"3. Schedule to run every 5 minutes\n\n"
+                    f"**Option B: Azure Monitor Agent with Custom Script**\n"
+                    f"1. Deploy PowerShell script to query service state\n"
+                    f"2. Write output to text file\n"
+                    f"3. Configure DCR to collect the custom log\n\n"
+                    f"**Sample PowerShell:**\n"
+                    f"```powershell\n"
+                    f"$service = Get-Service -Name '{service_name}' -ErrorAction SilentlyContinue\n"
+                    f"if ($service.Status -ne 'Running') {{\n"
+                    f"  # Write to custom log or send to Log Analytics\n"
+                    f"}}\n"
+                    f"```\n\n"
+                    f"**Note:** Event ID 7036 is simpler and recommended for most scenarios."
+                ),
+                complexity=MigrationComplexity.MODERATE,
+                confidence_score=0.7,
+                prerequisites=[
+                    "Azure Automation Account OR custom script deployment",
+                    "Log Analytics workspace with custom table",
+                ],
+                kql_query=f"""// Query custom service monitoring data
+ServiceMonitoring_CL
+| where TimeGenerated > ago(5m)
+| where ServiceName == "{service_name}"
+| where ServiceState != "Running"
+| project TimeGenerated, Computer, ServiceName, ServiceState""",
             ),
         ]
         

@@ -123,12 +123,12 @@ class ARMTemplateGenerator:
         
         for mapping in report.mappings:
             if mapping.can_migrate:
-                for rec in mapping.recommendations:
+                for index, rec in enumerate(mapping.recommendations):
                     if rec.target_type in [
                         AzureMonitorTargetType.METRIC_ALERT,
                         AzureMonitorTargetType.LOG_ALERT,
                     ]:
-                        resource = self._create_alert_resource(mapping, rec, location)
+                        resource = self._create_alert_resource(mapping, rec, location, index)
                         if resource:
                             template.resources.append(resource)
         
@@ -164,6 +164,9 @@ class ARMTemplateGenerator:
                         "description": "Resource ID of Data Collection Endpoint (optional)"
                     }
                 },
+            },
+            variables={
+                "workspaceId": "[parameters('workspaceResourceId')]"
             },
         )
         
@@ -317,8 +320,8 @@ class ARMTemplateGenerator:
         """Generate ARM resources from a mapping."""
         resources = []
         
-        for rec in mapping.recommendations:
-            resource = self._create_resource_from_recommendation(mapping, rec, location)
+        for index, rec in enumerate(mapping.recommendations):
+            resource = self._create_resource_from_recommendation(mapping, rec, location, index)
             if resource:
                 resources.append(resource)
         
@@ -329,12 +332,13 @@ class ARMTemplateGenerator:
         mapping: MigrationMapping,
         rec: AzureMonitorRecommendation,
         location: str,
+        index: int = 0,
     ) -> Optional[ARMResource]:
         """Create an ARM resource from a recommendation."""
         if rec.target_type == AzureMonitorTargetType.METRIC_ALERT:
-            return self._create_metric_alert(mapping, rec, location)
+            return self._create_metric_alert(mapping, rec, location, index)
         elif rec.target_type == AzureMonitorTargetType.LOG_ALERT:
-            return self._create_log_alert(mapping, rec, location)
+            return self._create_log_alert(mapping, rec, location, index)
         elif rec.target_type == AzureMonitorTargetType.DATA_COLLECTION_RULE:
             return None  # DCRs are consolidated separately
         
@@ -345,12 +349,13 @@ class ARMTemplateGenerator:
         mapping: MigrationMapping,
         rec: AzureMonitorRecommendation,
         location: str,
+        index: int = 0,
     ) -> Optional[ARMResource]:
         """Create an alert resource."""
         if rec.target_type == AzureMonitorTargetType.METRIC_ALERT:
-            return self._create_metric_alert(mapping, rec, location)
+            return self._create_metric_alert(mapping, rec, location, index)
         elif rec.target_type == AzureMonitorTargetType.LOG_ALERT:
-            return self._create_log_alert(mapping, rec, location)
+            return self._create_log_alert(mapping, rec, location, index)
         return None
     
     def _create_metric_alert(
@@ -358,10 +363,11 @@ class ARMTemplateGenerator:
         mapping: MigrationMapping,
         rec: AzureMonitorRecommendation,
         location: str,
+        index: int = 0,
     ) -> ARMResource:
         """Create a metric alert resource."""
-        # Sanitize name for Azure resource naming
-        safe_name = self._sanitize_resource_name(mapping.source_name)
+        # Sanitize name for Azure resource naming and make it unique
+        safe_name = self._sanitize_resource_name(f"{mapping.source_name}-{index}")
         
         # Use ARM snippet if provided, otherwise create default
         properties = rec.arm_template_snippet.get("properties", {}) if rec.arm_template_snippet else {}
@@ -403,9 +409,10 @@ class ARMTemplateGenerator:
         mapping: MigrationMapping,
         rec: AzureMonitorRecommendation,
         location: str,
+        index: int = 0,
     ) -> ARMResource:
         """Create a log alert (scheduled query rule) resource."""
-        safe_name = self._sanitize_resource_name(mapping.source_name)
+        safe_name = self._sanitize_resource_name(f"{mapping.source_name}-{index}")
         
         # Get KQL query from recommendation
         query = rec.kql_query or "// TODO: Add KQL query"
