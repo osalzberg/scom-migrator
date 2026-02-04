@@ -291,11 +291,14 @@ class ManagementPackParser:
             if ref_id:
                 references.append(ref_id)
         
+        # Get fallback name from file path or use default
+        fallback_name = self.file_path.stem if self.file_path else "UnknownManagementPack"
+        
         return ManagementPackMetadata(
-            id=mp_id or self.file_path.stem,
-            name=mp_id or self.file_path.stem,
+            id=mp_id or fallback_name,
+            name=mp_id or fallback_name,
             version=version or "1.0.0",
-            display_name=display_name or mp_id or self.file_path.stem,
+            display_name=display_name or mp_id or fallback_name,
             description=description,
             references=references,
         )
