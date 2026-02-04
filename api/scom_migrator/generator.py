@@ -40,7 +40,7 @@ class ARMTemplateGenerator:
     
     def __init__(self):
         """Initialize the ARM template generator."""
-        pass
+        self._used_names: set[str] = set()
     
     def generate_from_report(
         self,
@@ -69,6 +69,9 @@ class ARMTemplateGenerator:
             parameters=self._generate_parameters(workspace_name),
             variables=self._generate_variables(report),
         )
+        
+        # Reset used names for this template
+        self._used_names = set()
         
         # Add Log Analytics workspace if requested
         if include_workspace:
@@ -120,6 +123,9 @@ class ARMTemplateGenerator:
                 },
             },
         )
+        
+        # Reset used names for this template
+        self._used_names = set()
         
         for mapping in report.mappings:
             if mapping.can_migrate:
@@ -559,15 +565,24 @@ class ARMTemplateGenerator:
         return outputs
     
     def _sanitize_resource_name(self, name: str) -> str:
-        """Sanitize a string for use as an Azure resource name."""
+        """Sanitize a string for use as an Azure resource name and ensure uniqueness."""
         # Remove invalid characters
         safe = "".join(c if c.isalnum() or c in "-_" else "-" for c in name)
         # Remove consecutive dashes
         while "--" in safe:
             safe = safe.replace("--", "-")
         # Trim to max length and remove leading/trailing dashes
-        safe = safe[:60].strip("-")
-        return safe.lower() or "unnamed-resource"
+        safe = safe[:55].strip("-").lower() or "unnamed-resource"
+        
+        # Ensure uniqueness by adding a suffix if needed
+        original_safe = safe
+        counter = 1
+        while safe in self._used_names:
+            safe = f"{original_safe[:50]}-{counter}"
+            counter += 1
+        
+        self._used_names.add(safe)
+        return safe
     
     def export_template(
         self,
