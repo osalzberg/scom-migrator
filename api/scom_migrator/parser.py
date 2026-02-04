@@ -134,8 +134,14 @@ class ManagementPackParser:
         
         Returns:
             ManagementPack containing all parsed components
+            
+        Raises:
+            ValueError: If the file is not a valid SCOM Management Pack
         """
         self._load_xml()
+        
+        # Validate that this is actually a SCOM Management Pack
+        self._validate_management_pack()
         
         metadata = self._parse_metadata()
         classes = self._parse_classes()
@@ -143,6 +149,15 @@ class ManagementPackParser:
         monitors = self._parse_monitors()
         rules = self._parse_rules()
         discoveries = self._parse_discoveries()
+        
+        # Check if we found any components - if not, it's likely not a valid MP
+        total_components = len(monitors) + len(rules) + len(discoveries)
+        if total_components == 0 and len(classes) == 0:
+            raise ValueError(
+                "No SCOM components found in the file. This does not appear to be a valid "
+                "SCOM Management Pack. Please ensure you are uploading a .xml or .mp file "
+                "exported from System Center Operations Manager."
+            )
         
         return ManagementPack(
             metadata=metadata,
@@ -153,6 +168,38 @@ class ManagementPackParser:
             discoveries=discoveries,
         )
     
+    def _validate_management_pack(self) -> None:
+        """
+        Validate that the XML is a SCOM Management Pack.
+        
+        Raises:
+            ValueError: If the XML is not a valid SCOM Management Pack
+        """
+        if self._root is None:
+            raise ValueError("Failed to parse XML content")
+        
+        root_tag = self._root.tag.lower()
+        # Remove namespace if present
+        if "}" in root_tag:
+            root_tag = root_tag.split("}")[1]
+        
+        # Check for common SCOM MP root elements
+        valid_roots = ["managementpack", "manifest", "managementpackfragment", "templategroup"]
+        
+        if root_tag not in valid_roots:
+            # Check if any SCOM-specific elements exist
+            has_manifest = self._find(".//Manifest") is not None
+            has_monitoring = self._find(".//Monitoring") is not None
+            has_type_definitions = self._find(".//TypeDefinitions") is not None
+            
+            if not (has_manifest or has_monitoring or has_type_definitions):
+                raise ValueError(
+                    f"This file does not appear to be a SCOM Management Pack. "
+                    f"Found root element '{self._root.tag}' but expected a ManagementPack, "
+                    f"Manifest, or ManagementPackFragment element. Please upload a valid "
+                    f"SCOM Management Pack XML file."
+                )
+
     def _load_xml(self) -> None:
         """Load and parse the XML file or content safely."""
         if self._content:
