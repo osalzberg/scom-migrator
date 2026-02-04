@@ -206,12 +206,16 @@ class MigrationAnalyzer:
         
         # Architecture recommendations
         recommendations.append(
-            "🏗️ **Recommended Architecture**:\n"
-            "   1. Deploy Azure Monitor Agent to all target machines\n"
+            "🏗️ **Modern Azure Monitor Architecture (2026)**:\n"
+            "   1. Deploy **Azure Monitor Agent (AMA)** only - NO Log Analytics Agent, NO Dependency Agent\n"
             "   2. Create a central Log Analytics workspace\n"
-            "   3. Configure Data Collection Rules for each data type\n"
-            "   4. Create alert rules and action groups\n"
-            "   5. Build Azure Workbooks for visualization"
+            "   3. Configure Data Collection Rules (DCRs) with **Basic log tier** (default, 83% cheaper)\n"
+            "   4. Create **DCR associations** using tags/resource groups (replaces Computer Groups)\n"
+            "   5. Use **Azure Policy** to automate DCR associations at scale\n"
+            "   6. Create alert rules with appropriate log tier based on urgency\n"
+            "   7. Configure action groups for notifications\n"
+            "   8. Build Azure Workbooks for visualization\n\n"
+            "💰 **Cost Optimization**: Default to Basic logs ($0.50/GB) instead of Analytics ($3.00/GB) for 83% savings!"
         )
         
         return recommendations

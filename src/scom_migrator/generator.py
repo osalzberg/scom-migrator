@@ -227,6 +227,14 @@ class ARMTemplateGenerator:
                     "description": "Environment tag for resources"
                 }
             },
+            "logTier": {
+                "type": "string",
+                "defaultValue": "Basic",
+                "allowedValues": ["Analytics", "Basic", "Auxiliary"],
+                "metadata": {
+                    "description": "Log tier for data collection: Analytics ($3/GB, real-time), Basic ($0.50/GB, 83% cheaper), Auxiliary ($0.05/GB, archival)"
+                }
+            },
         }
     
     def _generate_variables(self, report: MigrationReport) -> dict[str, Any]:
@@ -451,8 +459,18 @@ class ARMTemplateGenerator:
         location: str,
         perf_counters: list[tuple[str, str, str]],
         event_logs: list[str],
+        log_tier: str = "Basic",  # Default to Basic tier for cost optimization
     ) -> ARMResource:
-        """Create a Data Collection Rule resource."""
+        """
+        Create a Data Collection Rule resource.
+        
+        Args:
+            name: Name of the DCR
+            location: Azure region
+            perf_counters: List of performance counters to collect
+            event_logs: List of event logs to collect
+            log_tier: Log tier - "Basic" (default, 83% cheaper), "Analytics", or "Auxiliary"
+        """
         data_flows = []
         data_sources = {}
         
@@ -503,17 +521,30 @@ class ARMTemplateGenerator:
             })
         
         properties = {
-            "description": "Data Collection Rule migrated from SCOM",
+            "description": f"Data Collection Rule migrated from SCOM (Log tier: {log_tier})",
             "dataSources": data_sources,
             "destinations": {
                 "logAnalytics": [
                     {
                         "name": "logAnalyticsWorkspace",
-                        "workspaceResourceId": "[parameters('workspaceResourceId')]"
+                        "workspaceResourceId": "[parameters('workspaceResourceId')]",
+                        "tableMode": log_tier  # "Basic", "Analytics", or "Auxiliary"
                     }
                 ]
             },
-            "dataFlows": data_flows
+            "dataFlows": data_flows,
+            "streamDeclarations": {
+                "Custom-Perf": {
+                    "columns": [
+                        {"name": "TimeGenerated", "type": "datetime"},
+                        {"name": "Computer", "type": "string"},
+                        {"name": "ObjectName", "type": "string"},
+                        {"name": "CounterName", "type": "string"},
+                        {"name": "InstanceName", "type": "string"},
+                        {"name": "CounterValue", "type": "real"}
+                    ]
+                }
+            }
         }
         
         return ARMResource(

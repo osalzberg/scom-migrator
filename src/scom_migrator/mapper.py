@@ -113,16 +113,24 @@ class AzureMonitorMapper:
         elif monitor.monitor_type == MonitorType.DEPENDENCY_MONITOR:
             recommendations.append(AzureMonitorRecommendation(
                 target_type=AzureMonitorTargetType.VM_INSIGHTS,
-                description="Use VM Insights for performance monitoring",
+                description="Use VM Insights with Azure Monitor Agent for dependency monitoring",
                 implementation_notes=(
-                    "Azure VM Insights provides dependency mapping through the Service Map feature. "
-                    "Enable VM Insights on your VMs to automatically discover and map dependencies."
+                    "**Azure VM Insights (Azure Monitor Agent ONLY - No Dependency Agent needed):**\n\n"
+                    "VM Insights with Azure Monitor Agent provides:\n"
+                    "- Performance monitoring (CPU, memory, disk, network)\n"
+                    "- Process inventory and discovery\n"
+                    "- Heartbeat/availability monitoring\n"
+                    "- **Optional**: Service Map feature for network connection topology\n"
+                    "  (All via Azure Monitor Agent - no separate Dependency Agent!)\n\n"
+                    "**For application-level dependencies:**\n"
+                    "Use Application Insights with auto-instrumentation instead of VM-level dependency mapping.\n\n"
+                    "**IMPORTANT:** Dependency Agent is deprecated - do NOT use it!"
                 ),
                 complexity=MigrationComplexity.SIMPLE,
                 confidence_score=0.8,
                 prerequisites=[
                     "Enable VM Insights on target VMs",
-                    "Install Azure Monitor Agent",
+                    "Install Azure Monitor Agent (AMA)",
                     "Configure Log Analytics workspace",
                 ],
             ))
@@ -401,34 +409,37 @@ Resources
         # VM Insights for dependency discovery
         recommendations.append(AzureMonitorRecommendation(
             target_type=AzureMonitorTargetType.VM_INSIGHTS,
-            description="Use VM Insights for automatic VM performance monitoring",
+            description="Use VM Insights with Azure Monitor Agent for automatic monitoring",
             implementation_notes=(
-                "**VM Insights - For automatic discovery and dependency mapping:**\n\n"
+                "**VM Insights - Automatic discovery with Azure Monitor Agent ONLY:**\n\n"
                 "VM Insights automatically discovers:\n"
-                "- VM performance metrics\n"
+                "- VM performance metrics (CPU, memory, disk, network)\n"
                 "- VM availability and heartbeat\n"
-                "- Resource utilization\n"
-                "- Performance data\n\n"
+                "- Process inventory\n"
+                "- **Optional**: Service Map for network connection topology\n\n"
+                "**IMPORTANT:** No Dependency Agent needed - Azure Monitor Agent handles everything!\n\n"
                 "**How to enable VM Insights:**\n"
                 "1. Go to Azure Portal → Monitor → Virtual Machines\n"
                 "2. Select your VMs and click 'Enable' under Insights\n"
                 "3. Choose your Log Analytics workspace\n"
-                "4. Install Azure Monitor Agent\n\n"
+                "4. Install Azure Monitor Agent (AMA)\n"
+                "5. Optionally enable Service Map if you need connection topology\n\n"
                 "**For hybrid/on-premises servers:**\n"
                 "1. Enable Azure Arc on your servers first\n"
                 "2. Then enable VM Insights on the Arc-enabled servers\n\n"
-                "**Cost Optimization:**\n"
-                "Consider using Basic or Auxiliary logs for high-volume data that doesn't need\n"
-                "real-time alerting to reduce ingestion costs."
+                "**💰 Cost Optimization:**\n"
+                "- Use **Basic logs** for InsightsMetrics (83% cheaper, $0.50/GB vs $3.00/GB)\n"
+                "- Use **Analytics logs** only for Heartbeat table (needed for real-time availability alerts)\n"
+                "- Use **Auxiliary logs** for long-term process inventory (98% cheaper, $0.05/GB)"
             ),
             complexity=MigrationComplexity.SIMPLE,
             confidence_score=0.85,
             prerequisites=[
                 "Log Analytics workspace",
-                "Azure Monitor Agent on target VMs",
+                "Azure Monitor Agent (AMA) on target VMs - NO Dependency Agent!",
                 "For on-premises: Azure Arc enabled servers",
             ],
-            kql_query="""// Query VM performance and health (Azure Monitor Agent - no Dependency Agent needed)
+            kql_query="""// Query VM performance and health (Azure Monitor Agent only)
 InsightsMetrics
 | where TimeGenerated > ago(1h)
 | where Origin == "vm.azm.ms"
@@ -668,12 +679,33 @@ ConfigurationData
                 description=f"Create log alert for performance counter {obj}\\{counter}",
                 implementation_notes=(
                     f"This performance counter requires collection via Data Collection Rule "
-                    f"and a Log Analytics scheduled query alert."
+                    f"and a Log Analytics scheduled query alert.\n\n"
+                    f"**💰 COST OPTIMIZATION - Log Tier Selection:**\n\n"
+                    f"Choose the appropriate log tier for Perf table:\n\n"
+                    f"| Tier | Cost/GB | Use Case | Alerting |\n"
+                    f"|------|---------|----------|----------|\n"
+                    f"| **Analytics** | $3.00 | Real-time alerts (<5 min) | Yes (real-time) |\n"
+                    f"| **Basic** | $0.50 | Delayed alerts (15+ min OK) | Yes (delayed) |\n"
+                    f"| **Auxiliary** | $0.05 | Historical analysis only | No |\n\n"
+                    f"**Recommended for Performance Counters: Basic Logs**\n"
+                    f"- 83% cost savings vs Analytics ($0.50 vs $3.00/GB)\n"
+                    f"- Alerting delay of 15-30 minutes is acceptable for most performance monitoring\n"
+                    f"- Use Analytics only if you need <5 minute response time\n\n"
+                    f"**Configure in DCR:**\n"
+                    f"```json\n"
+                    f'"destinations": {{\n'
+                    f'  "logAnalytics": [{{\n'
+                    f'    "workspaceResourceId": "...",\n'
+                    f'    "name": "workspace",\n'
+                    f'    "tableMode": "Basic"  // 83% cheaper! Use "Analytics" only if real-time needed\n'
+                    f"  }}]\n"
+                    f"}}\n"
+                    f"```"
                 ),
                 complexity=MigrationComplexity.MODERATE,
                 confidence_score=0.8,
                 prerequisites=[
-                    "Configure DCR to collect this performance counter",
+                    "Configure DCR to collect this performance counter with Basic log tier",
                     "Performance data flows to Log Analytics workspace",
                 ],
                 kql_query=kql_query,
@@ -696,13 +728,34 @@ ConfigurationData
             implementation_notes=(
                 f"Configure event collection via Data Collection Rule for the "
                 f"'{data_source.event_log or 'Windows'}' event log, then create "
-                f"a scheduled query alert rule."
+                f"a scheduled query alert rule.\n\n"
+                f"**💰 COST OPTIMIZATION - Log Tier Selection:**\n\n"
+                f"Choose the appropriate log tier for Event table:\n\n"
+                f"| Event Severity | Recommended Tier | Why |\n"
+                f"|----------------|------------------|-----|\n"
+                f"| **Error/Critical** | Analytics ($3.00/GB) | Need real-time alerts |\n"
+                f"| **Warning** | Basic ($0.50/GB) | 15-30 min delay OK |\n"
+                f"| **Informational** | Basic ($0.50/GB) | Historical analysis |\n\n"
+                f"**Best Practice:**\n"
+                f"- Create separate DCRs for different event severities\n"
+                f"- Critical events → Analytics table for real-time alerting\n"
+                f"- Informational events → Basic table for 83% cost savings\n\n"
+                f"**Example DCR configuration:**\n"
+                f"```json\n"
+                f'// DCR for critical events (Analytics tier)\n'
+                f'"xPathQueries": ["Application!*[System[(Level=1 or Level=2)]]"],\n'
+                f'"tableMode": "Analytics"\n\n'
+                f'// DCR for informational events (Basic tier)\n'
+                f'"xPathQueries": ["Application!*[System[(Level=4)]]"],\n'
+                f'"tableMode": "Basic"  // 83% cheaper!\n'
+                f"```"
             ),
             complexity=MigrationComplexity.SIMPLE,
             confidence_score=0.9,
             prerequisites=[
-                "Configure DCR for Windows event collection",
+                "Configure DCR for Windows event collection with appropriate log tier",
                 "Specify event log and event IDs to collect",
+                "Use Basic tier for non-critical events to reduce costs by 83%",
             ],
             kql_query=kql_query,
             arm_template_snippet={
@@ -832,23 +885,83 @@ Event
         # Build implementation notes with service-specific details
         implementation_notes = f"""**Monitor Windows Service: {service_name}**
 
-**Targeting Specific Machines (SCOM Class Equivalent):**
-In SCOM, this monitor targets a specific class discovered by your discovery rule.
-In Azure Monitor, use these approaches to target equivalent machines:
+**🎯 Modern Azure Monitor Targeting (Replaces SCOM Classes & Computer Groups):**
 
-**Option A: Resource Tags** (Recommended)
-- Tag VMs with key-value pairs matching your SCOM class
-- Example: Tag="ServerRole:WebServer" or Tag="ServiceType:{service_name}"
-- Alert scope: Filter by resource tags in alert rule
+⚠️ **IMPORTANT:** Computer Groups are DEPRECATED - do NOT use them!
 
-**Option B: Resource Groups**
-- Place similar servers in same Resource Group
-- Alert scope: Select specific Resource Group
+**PRIMARY METHOD: Data Collection Rule (DCR) Associations**
+This is the modern replacement for SCOM classes and computer groups:
 
-**Option C: Data Collection Rules with Resource Targeting**
-- Create DCRs that target specific resources using Azure Resource Manager scopes
-- Use DCR associations to dynamically target VMs based on tags or resource groups
-- Example: Associate DCR with all VMs tagged 'Role=WebServer'
+1. **Create a DCR for service monitoring** with the service you want to monitor
+2. **Associate DCR with target VMs** using one of these scope patterns:
+   
+   **Pattern A: Tag-based targeting** (Most flexible - like SCOM dynamic groups)
+   ```bash
+   # Associate DCR to all VMs with specific tag
+   az monitor data-collection rule association create \\
+     --name "ServiceMonitoring-WebServers" \\
+     --rule-id "/subscriptions/.../dataCollectionRules/ServiceMonitoring-DCR" \\
+     --resource-group "Production-RG" \\
+     --association-scope "Microsoft.Compute/virtualMachines/*" \\
+     --tag-filter "Role=WebServer"
+   ```
+   
+   **Pattern B: Resource Group targeting** (Simple - like SCOM explicit groups)
+   - Associate DCR with all VMs in a specific Resource Group
+   - VMs added to RG automatically get the DCR
+   
+   **Pattern C: Azure Policy** (Automatic - enforce at scale)
+   ```json
+   {{
+     "if": {{
+       "allOf": [
+         {{"field": "type", "equals": "Microsoft.Compute/virtualMachines"}},
+         {{"field": "tags.MonitorServices", "equals": "true"}}
+       ]
+     }},
+     "then": {{
+       "effect": "deployIfNotExists",
+       "details": {{
+         "type": "Microsoft.Insights/dataCollectionRuleAssociations",
+         "roleDefinitionIds": ["/providers/Microsoft.Authorization/roleDefinitions/..."],
+         "deployment": {{
+           "properties": {{
+             "template": {{
+               "resources": [{{
+                 "type": "Microsoft.Insights/dataCollectionRuleAssociations",
+                 "properties": {{
+                   "dataCollectionRuleId": "[parameters('dcrResourceId')]"
+                 }}
+               }}]
+             }}
+           }}
+         }}
+       }}
+     }}
+   }}
+   ```
+
+3. **Why DCR Associations > Computer Groups:**
+   - ✅ Automatic: VMs get monitoring when tagged/added to RG
+   - ✅ Dynamic: Association follows VM lifecycle (like SCOM dynamic groups)
+   - ✅ Policy-driven: Enforce compliance at scale
+   - ✅ Efficient: Data only collected from targeted VMs
+   - ❌ Computer Groups are DEPRECATED and being removed
+
+**SECONDARY METHOD: Alert Query Scoping**
+Use this in addition to DCR associations for alert notification targeting:
+```kql
+ConfigurationChange
+| where ConfigChangeType == "WindowsServices"
+| where SvcName == "{service_name}"
+// Scope to specific machines using tags
+| join kind=inner (
+    Heartbeat
+    | where TimeGenerated > ago(5m)
+    | where Tags contains "Role=WebServer"
+    | distinct Computer
+) on Computer
+```
 
 **Migration Steps:**
 
@@ -856,7 +969,12 @@ In Azure Monitor, use these approaches to target equivalent machines:
 1. Enable Change Tracking in Log Analytics workspace
 2. Go to Automation Account → Change tracking → Edit Settings
 3. Under Windows Services, add "{service_name}" to track
-4. Add target machines (with appropriate tags/resource groups)
+4. **Create DCR association** to target specific VMs (see targeting patterns above)
+
+**💰 Cost Optimization:**
+- Use **Analytics logs** for ConfigurationChange table (real-time alerting needed)
+- Use **Basic logs** ($0.50/GB) for ConfigurationData table (inventory queries)
+- Savings: ~70% cost reduction for service inventory data
 
 **Step 2: Create Alert with Targeting**
 1. Go to Azure Portal → Monitor → Alerts → + Create → Alert rule

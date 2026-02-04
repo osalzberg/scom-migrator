@@ -91,16 +91,46 @@ scom-migrator scan /path/to/mps --recursive
 
 The tool maps SCOM concepts to their Azure Monitor equivalents:
 
-| SCOM Component | Azure Monitor Equivalent |
-|----------------|-------------------------|
-| Performance Counter Monitor | Metric Alert / Log Alert with Perf table |
-| Windows Event Monitor | Log Alert with Event table |
-| Service Monitor | Change Tracking / Log Alert |
-| WMI-based Monitor | Log Alert with custom data |
-| Script-based Monitor | Azure Functions + Custom Metrics |
-| Discovery | Azure Resource Graph / VM Insights |
-| Alert Rules | Scheduled Query Rules |
-| Collection Rules | Data Collection Rules |
+| SCOM Component | Azure Monitor Equivalent | Notes |
+|----------------|-------------------------|-------|
+| Performance Counter Monitor | Metric Alert / Log Alert with Perf table | Use Basic logs (83% cheaper) |
+| Windows Event Monitor | Log Alert with Event table | Use Basic logs for non-critical events |
+| Service Monitor | Change Tracking / Log Alert | DCR associations replace computer groups |
+| WMI-based Monitor | Log Alert with custom data | Via Azure Monitor Agent |
+| Script-based Monitor | Azure Functions + Custom Metrics | |
+| Discovery | Azure Resource Graph / VM Insights | VM Insights uses AMA only (no Dependency Agent) |
+| Computer Groups | **DCR Associations + Azure Policy** | **Computer Groups are DEPRECATED** |
+| Alert Rules | Scheduled Query Rules | |
+| Collection Rules | Data Collection Rules | Default to Basic log tier |
+
+## ⚠️ **Important: Deprecated Features to AVOID**
+
+When migrating from SCOM to Azure Monitor, do **NOT** use these deprecated features:
+
+| Deprecated Feature | Modern Replacement | Why |
+|-------------------|-------------------|-----|
+| **Log Analytics Agent** | Azure Monitor Agent (AMA) | Log Analytics agent is being retired |
+| **Dependency Agent** | Azure Monitor Agent with VM Insights | AMA handles everything, no separate agent needed |
+| **Computer Groups** | DCR Associations + Azure Policy | Computer Groups being removed, use DCR targeting |
+| **MMA (Microsoft Monitoring Agent)** | Azure Monitor Agent (AMA) | MMA retired August 2024 |
+
+## 💰 **Cost Optimization with Log Tiers**
+
+Azure Monitor offers three log tiers with dramatically different costs:
+
+| Tier | Cost/GB | Ingestion | Retention | Alerting | Best For |
+|------|---------|-----------|-----------|----------|----------|
+| **Analytics** | $3.00 | Immediate | 30-730 days | Real-time (<5 min) | Critical alerts |
+| **Basic** | $0.50 | Immediate | 30-365 days | Delayed (15-30 min) | Most monitoring (83% savings!) |
+| **Auxiliary** | $0.05 | Delayed | 365-4,380 days | None | Compliance/archival (98% savings!) |
+
+**Default Recommendation:** Use **Basic logs** for all data collection unless you need real-time alerting. This provides **83% cost savings** with minimal impact on alerting capabilities.
+
+**Example Savings:**
+- 100 GB/day performance counters
+- Analytics cost: $9,000/month
+- Basic cost: $1,500/month
+- **Savings: $7,500/month (83%)**
 
 ## Generated Artifacts
 
@@ -224,18 +254,78 @@ Before deploying generated templates:
 1. **Log Analytics Workspace**
    - Create or identify target workspace
    - Configure appropriate retention settings
+   - Configure log tiers (Basic/Analytics/Auxiliary) for cost optimization
 
-2. **Azure Monitor Agent**
+2. **Azure Monitor Agent (AMA ONLY)**
    - Deploy AMA to all target machines
-   - For hybrid scenarios, enable Azure Arc
+   - **DO NOT install Log Analytics Agent (deprecated)**
+   - **DO NOT install Dependency Agent (not needed - AMA handles everything)**
+   - For hybrid scenarios, enable Azure Arc first
 
-3. **Data Collection Rules**
+3. **Data Collection Rules (DCRs)**
    - Review and customize generated DCRs
-   - Associate DCRs with target resources
+   - Set appropriate log tier (default: Basic for 83% cost savings)
+   - Create DCR associations to target specific VMs (replaces Computer Groups)
+   - Use Azure Policy to automate DCR associations
 
 4. **Action Groups**
    - Configure notification channels
    - Update email/SMS/webhook settings
+
+5. **VM Insights (Optional)**
+   - Enable VM Insights for automatic performance monitoring
+   - Uses Azure Monitor Agent only (no Dependency Agent needed)
+   - Service Map feature provides network topology (optional)
+
+## Modern Azure Monitor Architecture (2026)
+
+### Data Collection Rules (DCRs) Replace Computer Groups
+
+SCOM uses Computer Groups to target monitoring. Azure Monitor uses **DCR Associations** instead:
+
+**✅ DO:** Use DCR Associations
+```bash
+# Associate DCR with VMs by tag (dynamic targeting like SCOM)
+az monitor data-collection rule association create \
+  --name "WebServer-Monitoring" \
+  --rule-id "/subscriptions/.../dataCollectionRules/WebServer-DCR" \
+  --resource-group "Production-RG" \
+  --association-scope "Microsoft.Compute/virtualMachines/*" \
+  --tag-filter "Role=WebServer"
+
+# Automate with Azure Policy
+# Policy automatically associates DCR when VM is tagged
+```
+
+**❌ DON'T:** Use Computer Groups (deprecated, being removed)
+
+### Log Tier Selection for Cost Optimization
+
+**✅ DO:** Default to Basic logs (83% cheaper)
+```json
+{
+  "destinations": {
+    "logAnalytics": [{
+      "workspaceResourceId": "...",
+      "tableMode": "Basic"  // $0.50/GB vs $3.00/GB
+    }]
+  }
+}
+```
+
+**❌ DON'T:** Use Analytics logs for everything (expensive)
+
+### Azure Monitor Agent vs Legacy Agents
+
+**✅ DO:** Use Azure Monitor Agent (AMA) only
+- Single agent for everything
+- VM Insights, performance, events, custom logs
+- Service Map (optional) for network topology
+
+**❌ DON'T:** Install these deprecated agents:
+- Log Analytics Agent (MMA) - retired August 2024
+- Dependency Agent - not needed, AMA handles everything
+- Microsoft Monitoring Agent - same as MMA, retired
 
 ## Configuration
 
