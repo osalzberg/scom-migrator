@@ -299,7 +299,7 @@ class AzureMonitorMapper:
                         "3. **Send data to Log Analytics** custom table\n"
                         "4. **Use KQL queries** to analyze discovered resources\n\n"
                         f"Original WMI Query: `{discovery.data_source.wmi_query or 'Not specified'}`\n"
-                        f"WMI Namespace: `{discovery.data_source.wmi_namespace or 'root\\cimv2'}`"
+                        f"WMI Namespace: `{discovery.data_source.wmi_namespace or 'root' + chr(92) + 'cimv2'}`"
                     ),
                     complexity=MigrationComplexity.MODERATE,
                     confidence_score=0.75,
