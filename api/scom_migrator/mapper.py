@@ -113,16 +113,22 @@ class AzureMonitorMapper:
         elif monitor.monitor_type == MonitorType.DEPENDENCY_MONITOR:
             recommendations.append(AzureMonitorRecommendation(
                 target_type=AzureMonitorTargetType.VM_INSIGHTS,
-                description="Use VM Insights for performance monitoring",
+                description="Use VM Insights with Azure Monitor Agent",
                 implementation_notes=(
-                    "Azure VM Insights provides dependency mapping through the Service Map feature. "
-                    "Enable VM Insights on your VMs to automatically discover and map dependencies."
+                    "**Azure VM Insights with Azure Monitor Agent:**\n\n"
+                    "VM Insights provides:\n"
+                    "- Performance monitoring (CPU, memory, disk, network)\n"
+                    "- Process inventory and discovery\n"
+                    "- Heartbeat/availability monitoring\n"
+                    "- Service Map feature for network connection topology\n\n"
+                    "**For application-level dependencies:**\n"
+                    "Use Application Insights with auto-instrumentation."
                 ),
                 complexity=MigrationComplexity.SIMPLE,
                 confidence_score=0.8,
                 prerequisites=[
                     "Enable VM Insights on target VMs",
-                    "Install Azure Monitor Agent",
+                    "Install Azure Monitor Agent (AMA)",
                     "Configure Log Analytics workspace",
                 ],
             ))
@@ -293,7 +299,7 @@ class AzureMonitorMapper:
                         "3. **Send data to Log Analytics** custom table\n"
                         "4. **Use KQL queries** to analyze discovered resources\n\n"
                         f"Original WMI Query: `{discovery.data_source.wmi_query or 'Not specified'}`\n"
-                        "WMI Namespace: `" + (discovery.data_source.wmi_namespace or 'root\\cimv2') + "`"
+                        f"WMI Namespace: `{discovery.data_source.wmi_namespace or 'root\\\\cimv2'}`"
                     ),
                     complexity=MigrationComplexity.MODERATE,
                     confidence_score=0.75,
@@ -308,32 +314,51 @@ class AzureMonitorMapper:
                 
             elif ds_type == DataSourceType.REGISTRY:
                 recommendations.append(AzureMonitorRecommendation(
-                    target_type=AzureMonitorTargetType.LOG_ALERT,
-                    description="Use Change Tracking and Inventory for registry-based discovery",
+                    target_type=AzureMonitorTargetType.DATA_COLLECTION_RULE,
+                    description="Monitor registry keys via Azure Monitor Agent custom script",
                     implementation_notes=(
-                        "**How to migrate Registry-based discovery to Azure:**\n\n"
-                        "1. **Enable Change Tracking and Inventory** solution in your Log Analytics workspace\n"
-                        "2. **Configure Registry tracking** in the Change Tracking settings\n"
-                        "3. **Add the specific registry paths** you want to monitor\n"
-                        "4. **Query ConfigurationData** table for inventory data\n\n"
-                        "**Azure Portal Steps:**\n"
-                        "- Go to Automation Account → Change tracking → Edit Settings\n"
-                        "- Under Windows Registry, add the registry keys to track\n"
-                        "- Set collection frequency (recommended: every 1-6 hours)"
+                "**How to migrate Registry-based discovery to Azure:**\n\n"
+                "**Modern Approach: PowerShell Script + DCR**\n"
+                        "1. Create PowerShell script to query registry:\n"
+                        "   ```powershell\n"
+                        "   $regValue = Get-ItemProperty -Path 'HKLM:\\Your\\Path' -ErrorAction SilentlyContinue\n"
+                        "   $result = [PSCustomObject]@{\n"
+                        "       TimeGenerated = Get-Date\n"
+                        "       Computer = $env:COMPUTERNAME\n"
+                        "       RegistryKey = 'HKLM:\\Your\\Path'\n"
+                        "       ValueName = 'YourValue'\n"
+                        "       ValueData = $regValue.YourValue\n"
+                        "   }\n"
+                        "   # Output to file for DCR collection\n"
+                        "   $result | ConvertTo-Json | Out-File C:\\Logs\\registry.json -Append\n"
+                        "   ```\n\n"
+                        "2. Schedule script via Task Scheduler or Azure Automation\n"
+                        "3. Create DCR to collect the JSON log file\n"
+                        "4. Data flows to custom table in Log Analytics\n\n"
+                        "**Alternative: Use Registry monitoring in Azure Policy Guest Configuration**\n"
+                        "- Define desired registry state in Policy\n"
+                        "- Compliance data automatically collected\n"
+                        "- Query GuestConfigurationResources table"
                     ),
-                    complexity=MigrationComplexity.SIMPLE,
-                    confidence_score=0.85,
+                    complexity=MigrationComplexity.MODERATE,
+                    confidence_score=0.75,
                     prerequisites=[
-                        "Azure Automation Account",
-                        "Change Tracking and Inventory solution enabled",
+                        "Azure Monitor Agent installed",
+                        "Custom PowerShell script for registry monitoring",
+                        "DCR for custom log collection OR Azure Policy Guest Configuration",
                         "Log Analytics workspace",
                     ],
-                    kql_query="""// Query registry inventory data
-ConfigurationData
-| where ConfigDataType == "Registry"
+                    kql_query="""// Query custom registry monitoring data
+RegistryMonitoring_CL
 | where TimeGenerated > ago(24h)
 | project TimeGenerated, Computer, RegistryKey, ValueName, ValueData
-| order by TimeGenerated desc""",
+| order by TimeGenerated desc
+
+// Alternative: Use Azure Policy Guest Configuration compliance data
+GuestConfigurationResources
+| where type == "Microsoft.GuestConfiguration/guestConfigurationAssignments/reports"
+| where properties.complianceStatus == "NonCompliant"
+| project TimeGenerated, Computer = split(id, '/')[8], ComplianceReason = properties.complianceReasons""",
                 ))
                 complexity = MigrationComplexity.SIMPLE
                 
@@ -401,34 +426,37 @@ Resources
         # VM Insights for dependency discovery
         recommendations.append(AzureMonitorRecommendation(
             target_type=AzureMonitorTargetType.VM_INSIGHTS,
-            description="Use VM Insights for automatic VM performance monitoring",
+            description="Use VM Insights with Azure Monitor Agent for automatic monitoring",
             implementation_notes=(
-                "**VM Insights - For automatic discovery and dependency mapping:**\n\n"
+                "**VM Insights - Automatic discovery with Azure Monitor Agent ONLY:**\n\n"
                 "VM Insights automatically discovers:\n"
-                "- VM performance metrics\n"
+                "- VM performance metrics (CPU, memory, disk, network)\n"
                 "- VM availability and heartbeat\n"
-                "- Resource utilization\n"
-                "- Performance data\n\n"
+                "- Process inventory\n"
+                "- **Optional**: Service Map for network connection topology\n\n"
+                "**IMPORTANT:** No Dependency Agent needed - Azure Monitor Agent handles everything!\n\n"
                 "**How to enable VM Insights:**\n"
                 "1. Go to Azure Portal → Monitor → Virtual Machines\n"
                 "2. Select your VMs and click 'Enable' under Insights\n"
                 "3. Choose your Log Analytics workspace\n"
-                "4. Install Azure Monitor Agent\n\n"
+                "4. Install Azure Monitor Agent (AMA)\n"
+                "5. Optionally enable Service Map if you need connection topology\n\n"
                 "**For hybrid/on-premises servers:**\n"
                 "1. Enable Azure Arc on your servers first\n"
                 "2. Then enable VM Insights on the Arc-enabled servers\n\n"
-                "**Cost Optimization:**\n"
-                "Consider using Basic or Auxiliary logs for high-volume data that doesn't need\n"
-                "real-time alerting to reduce ingestion costs."
+                "**💰 Cost Optimization:**\n"
+                "- Use **Basic logs** for InsightsMetrics (83% cheaper, $0.50/GB vs $3.00/GB)\n"
+                "- Use **Analytics logs** only for Heartbeat table (needed for real-time availability alerts)\n"
+                "- Use **Auxiliary logs** for long-term process inventory (98% cheaper, $0.05/GB)"
             ),
             complexity=MigrationComplexity.SIMPLE,
             confidence_score=0.85,
             prerequisites=[
                 "Log Analytics workspace",
-                "Azure Monitor Agent on target VMs",
+                "Azure Monitor Agent (AMA) on target VMs - NO Dependency Agent!",
                 "For on-premises: Azure Arc enabled servers",
             ],
-            kql_query="""// Query VM performance and health (Azure Monitor Agent - no Dependency Agent needed)
+            kql_query="""// Query VM performance and health (Azure Monitor Agent only)
 InsightsMetrics
 | where TimeGenerated > ago(1h)
 | where Origin == "vm.azm.ms"
@@ -442,46 +470,50 @@ Heartbeat
 | order by LastHeartbeat desc""",
         ))
         
-        # Change Tracking for software inventory
+        # Azure Monitor Agent for software and service inventory
         recommendations.append(AzureMonitorRecommendation(
-            target_type=AzureMonitorTargetType.LOG_ANALYTICS_QUERY,
-            description="Use Change Tracking for software and service inventory",
+            target_type=AzureMonitorTargetType.DATA_COLLECTION_RULE,
+            description="Use Azure Monitor Agent for software and service inventory",
             implementation_notes=(
-                "**Change Tracking and Inventory - For software/service discovery:**\n\n"
-                "Change Tracking automatically collects:\n"
-                "- Installed software and versions\n"
-                "- Windows Services and their state\n"
-                "- Windows Registry keys\n"
-                "- Linux daemons\n"
-                "- File changes\n\n"
-                "**How to enable:**\n"
-                "1. Create an Azure Automation Account\n"
-                "2. Go to Automation Account → Change tracking\n"
-                "3. Add machines (Azure VMs or Arc-enabled servers)\n"
-                "4. Configure what to track in Settings\n\n"
-                "**Query inventory data:**\n"
-                "Use the ConfigurationData and ConfigurationChange tables"
+                "**Modern Inventory Collection via Azure Monitor Agent:**\n\n"
+                "**Option 1: VM Insights (Recommended for Services)**\n"
+                "- Automatically collects running process/service inventory\n"
+                "- Uses InsightsMetrics and VMProcess tables\n"
+                "- No configuration needed - enable VM Insights\n\n"
+                "**Option 2: Custom Script via Azure Automation**\n"
+                "- Create PowerShell runbook to collect inventory\n"
+                "- Use `Send-AzMonitorCustomLog` to send to Log Analytics\n"
+                "- Schedule to run periodically\n\n"
+                "**Option 3: Microsoft Defender for Cloud**\n"
+                "- Provides software inventory automatically\n"
+                "- Uses SecurityResources table in Azure Resource Graph\n"
+                "- No DCR needed\n\n"
+                "**Example PowerShell for custom inventory:**\n"
+                "```powershell\n"
+                "$services = Get-Service | Select-Object Name, DisplayName, Status, StartType\n"
+                "$software = Get-ItemProperty HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*\n"
+                "# Send to Log Analytics using HTTP Data Collector API or custom table DCR\n"
+                "```"
             ),
-            complexity=MigrationComplexity.SIMPLE,
+            complexity=MigrationComplexity.MODERATE,
             confidence_score=0.8,
             prerequisites=[
-                "Azure Automation Account",
+                "Azure Monitor Agent on target VMs",
                 "Log Analytics workspace",
-                "Change Tracking solution enabled",
+                "Choose: VM Insights, Azure Automation, or Defender for Cloud",
             ],
-            kql_query="""// Software inventory
-ConfigurationData
-| where ConfigDataType == "Software"
-| where TimeGenerated > ago(7d)
-| summarize arg_max(TimeGenerated, *) by SoftwareName, Computer
-| project Computer, SoftwareName, CurrentVersion, Publisher
-
-// Windows Services inventory
-ConfigurationData
-| where ConfigDataType == "WindowsServices"
+            kql_query="""// Service inventory via VM Insights
+VMProcess
 | where TimeGenerated > ago(1d)
-| summarize arg_max(TimeGenerated, *) by SvcName, Computer
-| project Computer, SvcName, SvcDisplayName, SvcState, SvcStartupType""",
+| where ProcessName has "svc" or DisplayName has "service"
+| summarize arg_max(TimeGenerated, *) by Computer, ProcessName
+| project Computer, ProcessName, DisplayName, ExecutablePath, CompanyName
+
+// Alternative: Query services via custom collection
+CustomServiceInventory_CL
+| where TimeGenerated > ago(1d)
+| summarize arg_max(TimeGenerated, *) by ServiceName, Computer
+| project Computer, ServiceName, ServiceDisplayName, ServiceState, StartupType""",
         ))
         
         limitations.append(
@@ -491,7 +523,7 @@ ConfigurationData
         
         manual_steps.extend([
             "1. Identify what resources the SCOM discovery was finding",
-            "2. Choose the appropriate Azure service (Resource Graph, VM Insights, or Change Tracking)",
+            "2. Choose the appropriate Azure service (Resource Graph or VM Insights)",
             "3. Enable the service and configure data collection",
             "4. Create KQL queries to retrieve the discovered data",
             "5. Optionally create Azure Workbooks to visualize the inventory",
@@ -510,9 +542,7 @@ ConfigurationData
             migration_notes=[
                 "Azure provides multiple discovery mechanisms depending on what you need to discover",
                 "For Azure resources: Use Azure Resource Graph",
-                "For VM processes/dependencies: Use VM Insights",
-                "For software/services inventory: Use Change Tracking and Inventory",
-                "For custom discovery: Use Azure Automation or Azure Functions",
+                        "For custom discovery: Use Azure Automation or Azure Functions",
             ],
         )
     
@@ -541,10 +571,7 @@ Perf
 | where TimeGenerated > ago(1h)
 | summarize by Computer, ExecutableName
 
-// Use Change Tracking for software inventory:
-ConfigurationData
-| where ConfigDataType == "Software"
-| summarize arg_max(TimeGenerated, *) by SoftwareName, Computer"""
+"""
     
     def _map_data_source(
         self,
@@ -647,12 +674,11 @@ ConfigurationData
                 }
             }
             
-            counter_name = obj + "\\" + counter
             recommendations.append(AzureMonitorRecommendation(
                 target_type=AzureMonitorTargetType.METRIC_ALERT,
                 description=f"Create metric alert for {azure_metric}",
                 implementation_notes=(
-                    f"The SCOM performance counter '{counter_name}' maps to "
+                    f"The SCOM performance counter '{obj}\\{counter}' maps to "
                     f"Azure Monitor metric '{azure_metric}'. Create a metric alert rule "
                     "with the appropriate threshold."
                 ),
@@ -664,18 +690,38 @@ ConfigurationData
             # Need Log Analytics for this counter
             kql_query = self._generate_perf_kql(data_source)
             
-            counter_name = obj + "\\" + counter
             recommendations.append(AzureMonitorRecommendation(
                 target_type=AzureMonitorTargetType.LOG_ALERT,
-                description=f"Create log alert for performance counter {counter_name}",
+                description=f"Create log alert for performance counter {obj}\\{counter}",
                 implementation_notes=(
                     f"This performance counter requires collection via Data Collection Rule "
-                    f"and a Log Analytics scheduled query alert."
+                    f"and a Log Analytics scheduled query alert.\n\n"
+                    f"**💰 COST OPTIMIZATION - Log Tier Selection:**\n\n"
+                    f"Choose the appropriate log tier for Perf table:\n\n"
+                    f"| Tier | Cost/GB | Use Case | Alerting |\n"
+                    f"|------|---------|----------|----------|\n"
+                    f"| **Analytics** | $3.00 | Real-time alerts (<5 min) | Yes (real-time) |\n"
+                    f"| **Basic** | $0.50 | Delayed alerts (15+ min OK) | Yes (delayed) |\n"
+                    f"| **Auxiliary** | $0.05 | Historical analysis only | No |\n\n"
+                    f"**Recommended for Performance Counters: Basic Logs**\n"
+                    f"- 83% cost savings vs Analytics ($0.50 vs $3.00/GB)\n"
+                    f"- Alerting delay of 15-30 minutes is acceptable for most performance monitoring\n"
+                    f"- Use Analytics only if you need <5 minute response time\n\n"
+                    f"**Configure in DCR:**\n"
+                    f"```json\n"
+                    f'"destinations": {{\n'
+                    f'  "logAnalytics": [{{\n'
+                    f'    "workspaceResourceId": "...",\n'
+                    f'    "name": "workspace",\n'
+                    f'    "tableMode": "Basic"  // 83% cheaper! Use "Analytics" only if real-time needed\n'
+                    f"  }}]\n"
+                    f"}}\n"
+                    f"```"
                 ),
                 complexity=MigrationComplexity.MODERATE,
                 confidence_score=0.8,
                 prerequisites=[
-                    "Configure DCR to collect this performance counter",
+                    "Configure DCR to collect this performance counter with Basic log tier",
                     "Performance data flows to Log Analytics workspace",
                 ],
                 kql_query=kql_query,
@@ -698,13 +744,34 @@ ConfigurationData
             implementation_notes=(
                 f"Configure event collection via Data Collection Rule for the "
                 f"'{data_source.event_log or 'Windows'}' event log, then create "
-                f"a scheduled query alert rule."
+                f"a scheduled query alert rule.\n\n"
+                f"**💰 COST OPTIMIZATION - Log Tier Selection:**\n\n"
+                f"Choose the appropriate log tier for Event table:\n\n"
+                f"| Event Severity | Recommended Tier | Why |\n"
+                f"|----------------|------------------|-----|\n"
+                f"| **Error/Critical** | Analytics ($3.00/GB) | Need real-time alerts |\n"
+                f"| **Warning** | Basic ($0.50/GB) | 15-30 min delay OK |\n"
+                f"| **Informational** | Basic ($0.50/GB) | Historical analysis |\n\n"
+                f"**Best Practice:**\n"
+                f"- Create separate DCRs for different event severities\n"
+                f"- Critical events → Analytics table for real-time alerting\n"
+                f"- Informational events → Basic table for 83% cost savings\n\n"
+                f"**Example DCR configuration:**\n"
+                f"```json\n"
+                f'// DCR for critical events (Analytics tier)\n'
+                f'"xPathQueries": ["Application!*[System[(Level=1 or Level=2)]]"],\n'
+                f'"tableMode": "Analytics"\n\n'
+                f'// DCR for informational events (Basic tier)\n'
+                f'"xPathQueries": ["Application!*[System[(Level=4)]]"],\n'
+                f'"tableMode": "Basic"  // 83% cheaper!\n'
+                f"```"
             ),
             complexity=MigrationComplexity.SIMPLE,
             confidence_score=0.9,
             prerequisites=[
-                "Configure DCR for Windows event collection",
+                "Configure DCR for Windows event collection with appropriate log tier",
                 "Specify event log and event IDs to collect",
+                "Use Basic tier for non-critical events to reduce costs by 83%",
             ],
             kql_query=kql_query,
             arm_template_snippet={
@@ -792,25 +859,21 @@ ConfigurationData
         """Map Windows service monitoring to Azure Monitor."""
         service_name = data_source.service_name or "YourServiceName"
         
-        # Generate specific KQL query with the actual service name
-        kql_query_change_tracking = f"""// Monitor {service_name} service state changes
-ConfigurationChange
-| where ConfigChangeType == "WindowsServices"
-| where SvcName == "{service_name}"
-| where SvcState == "Stopped"
-| where SvcPreviousState == "Running"
-| project TimeGenerated, Computer, SvcName, SvcDisplayName, SvcState, SvcStartupType
-| order by TimeGenerated desc"""
-
-        kql_query_event_log = f"""// Monitor {service_name} service via Event Log (Event ID 7036)
+        # Generate specific KQL query with the actual service name - Modern approach using Event ID 7036
+        kql_query_event_log = f"""// Monitor {service_name} service via Event ID 7036 (Service Control Manager)
+// This is the MODERN RECOMMENDED approach for service monitoring
 Event
+| where TimeGenerated > ago(5m)
 | where EventLog == "System"
 | where Source == "Service Control Manager"
 | where EventID == 7036
 | where RenderedDescription contains "{service_name}"
-| where RenderedDescription contains "stopped"
-| project TimeGenerated, Computer, RenderedDescription, EventID
-| order by TimeGenerated desc"""
+| where RenderedDescription contains "stopped" or RenderedDescription contains "terminated"
+| project TimeGenerated, Computer, RenderedDescription, EventID, ParameterXml
+| order by TimeGenerated desc
+
+// For targeting specific VMs, add:
+// | join kind=inner (Heartbeat | where Tags contains "Role=YourRole" | distinct Computer) on Computer"""
 
         kql_query_vm_process = f"""// Monitor {service_name} service via Heartbeat and Perf (Azure Monitor Agent only)
 // Use Heartbeat to verify VM is online
@@ -834,41 +897,113 @@ Event
         # Build implementation notes with service-specific details
         implementation_notes = f"""**Monitor Windows Service: {service_name}**
 
-**Targeting Specific Machines (SCOM Class Equivalent):**
-In SCOM, this monitor targets a specific class discovered by your discovery rule.
-In Azure Monitor, use these approaches to target equivalent machines:
+**🎯 Modern Azure Monitor Targeting (Replaces SCOM Classes & Computer Groups):**
 
-**Option A: Resource Tags** (Recommended)
-- Tag VMs with key-value pairs matching your SCOM class
-- Example: Tag="ServerRole:WebServer" or Tag="ServiceType:{service_name}"
-- Alert scope: Filter by resource tags in alert rule
+⚠️ **IMPORTANT:** Computer Groups are DEPRECATED - do NOT use them!
 
-**Option B: Resource Groups**
-- Place similar servers in same Resource Group
-- Alert scope: Select specific Resource Group
+**PRIMARY METHOD: Data Collection Rule (DCR) Associations**
+This is the modern replacement for SCOM classes and computer groups:
 
-**Option C: Data Collection Rules with Resource Targeting**
-- Create DCRs that target specific resources using Azure Resource Manager scopes
-- Use DCR associations to dynamically target VMs based on tags or resource groups
-- Example: Associate DCR with all VMs tagged 'Role=WebServer'
+1. **Create a DCR for service monitoring** with the service you want to monitor
+2. **Associate DCR with target VMs** using one of these scope patterns:
+   
+   **Pattern A: Tag-based targeting** (Most flexible - like SCOM dynamic groups)
+   ```bash
+   # Associate DCR to all VMs with specific tag
+   az monitor data-collection rule association create \\
+     --name "ServiceMonitoring-WebServers" \\
+     --rule-id "/subscriptions/.../dataCollectionRules/ServiceMonitoring-DCR" \\
+     --resource-group "Production-RG" \\
+     --association-scope "Microsoft.Compute/virtualMachines/*" \\
+     --tag-filter "Role=WebServer"
+   ```
+   
+   **Pattern B: Resource Group targeting** (Simple - like SCOM explicit groups)
+   - Associate DCR with all VMs in a specific Resource Group
+   - VMs added to RG automatically get the DCR
+   
+   **Pattern C: Azure Policy** (Automatic - enforce at scale)
+   ```json
+   {{
+     "if": {{
+       "allOf": [
+         {{"field": "type", "equals": "Microsoft.Compute/virtualMachines"}},
+         {{"field": "tags.MonitorServices", "equals": "true"}}
+       ]
+     }},
+     "then": {{
+       "effect": "deployIfNotExists",
+       "details": {{
+         "type": "Microsoft.Insights/dataCollectionRuleAssociations",
+         "roleDefinitionIds": ["/providers/Microsoft.Authorization/roleDefinitions/..."],
+         "deployment": {{
+           "properties": {{
+             "template": {{
+               "resources": [{{
+                 "type": "Microsoft.Insights/dataCollectionRuleAssociations",
+                 "properties": {{
+                   "dataCollectionRuleId": "[parameters('dcrResourceId')]"
+                 }}
+               }}]
+             }}
+           }}
+         }}
+       }}
+     }}
+   }}
+   ```
+
+3. **Why DCR Associations > Computer Groups:**
+   - ✅ Automatic: VMs get monitoring when tagged/added to RG
+   - ✅ Dynamic: Association follows VM lifecycle (like SCOM dynamic groups)
+   - ✅ Policy-driven: Enforce compliance at scale
+   - ✅ Efficient: Data only collected from targeted VMs
+   - ❌ Computer Groups are DEPRECATED and being removed
+
+**SECONDARY METHOD: Alert Query Scoping**
+Use this in addition to DCR associations for alert notification targeting:
+```kql
+Event
+| where EventLog == "System"
+| where Source == "Service Control Manager"
+| where EventID == 7036
+| where SvcName == "{service_name}"
+// Scope to specific machines using tags
+| join kind=inner (
+    Heartbeat
+    | where TimeGenerated > ago(5m)
+    | where Tags contains "Role=WebServer"
+    | distinct Computer
+) on Computer
+```
 
 **Migration Steps:**
 
-**Step 1: Change Tracking (Recommended)**
-1. Enable Change Tracking in Log Analytics workspace
-2. Go to Automation Account → Change tracking → Edit Settings
-3. Under Windows Services, add "{service_name}" to track
-4. Add target machines (with appropriate tags/resource groups)
+**Step 1: Create Data Collection Rule**
+1. Go to Azure Portal → Monitor → Data Collection Rules → + Create
+2. Configure data source:
+   - Type: Windows Event Logs
+   - Event Log: System
+   - XPath Query: `System!*[System[Provider[@Name='Service Control Manager'] and (EventID=7036)]]`
+3. Configure destination:
+   - Log Analytics workspace
+   - Table: Event
+   - **Table Mode: Analytics** (service events are low volume, need real-time)
+4. Save the DCR
 
-**Step 2: Create Alert with Targeting**
+**Step 2: Associate DCR with Target VMs**
+Choose one of the targeting patterns from above (tag-based, resource group, or Azure Policy)
+
+**Step 3: Create Alert Rule with Targeting**
 1. Go to Azure Portal → Monitor → Alerts → + Create → Alert rule
 2. **Scope**: Select Log Analytics workspace
 3. **Condition**: Custom log search with KQL query (provided below)
 4. **Modify KQL to target specific machines:**
    ```
    // Add computer filtering to match your SCOM target class
-   ConfigurationChange
-   | where ConfigChangeType == "WindowsServices"
+   Event
+   | where EventLog == "System"
+   | where EventID == 7036
    | where SvcName == "{service_name}"
    | where SvcState == "Stopped"
    // TARGET FILTERING - Choose one:
@@ -887,40 +1022,70 @@ In Azure Monitor, use these approaches to target equivalent machines:
 
         recommendations = [
             AzureMonitorRecommendation(
-                target_type=AzureMonitorTargetType.LOG_ALERT,
-                description=f"Monitor {service_name} service via Change Tracking",
-                implementation_notes=implementation_notes,
-                complexity=MigrationComplexity.SIMPLE,
-                confidence_score=0.9,
-                prerequisites=[
-                    "Azure Automation Account",
-                    "Enable Change Tracking and Inventory solution",
-                    f"Configure tracking for {service_name} service",
-                    "Log Analytics workspace",
-                ],
-                kql_query=kql_query_change_tracking,
-            ),
-            AzureMonitorRecommendation(
                 target_type=AzureMonitorTargetType.DATA_COLLECTION_RULE,
-                description=f"Monitor {service_name} via System Event Log (Event ID 7036)",
+                description=f"Monitor {service_name} service via System Event Log (Event ID 7036) - RECOMMENDED",
                 implementation_notes=(
-                    f"**Alternative approach using Windows Event Logs:**\n\n"
+                    f"**Modern Service Monitoring via Azure Monitor Agent:**\n\n"
                     f"Collect Service Control Manager events (Event ID 7036) that track all service state changes.\n"
                     f"Filter for '{service_name}' service specifically in your alert query.\n\n"
-                    f"**DCR Configuration:**\n"
-                    f"- Event Log: System\n"
-                    f"- Event IDs: 7036 (Service state change)\n"
-                    f"- Source: Service Control Manager\n\n"
-                    f"This method provides real-time service monitoring without Change Tracking dependency."
+                    f"**DCR Configuration Steps:**\n"
+                    f"1. Create Data Collection Rule for System event log\n"
+                    f"2. XPath Query: `System!*[System[Provider[@Name='Service Control Manager'] and (EventID=7036)]]`\n"
+                    f"3. Associate DCR with target VMs (see targeting patterns above)\n"
+                    f"4. Data flows to Event table in Log Analytics\n\n"
+                    f"**💰 Cost Optimization:**\n"
+                    f"- Use **Analytics logs** for Event table (real-time alerting needed for services)\n"
+                    f"- Service state changes are typically low volume (<1 GB/day)\n\n"
+                    f"**Why Event ID 7036:**\n"
+                    f"- Logs ALL service state changes (start, stop, pause, continue)\n"
+                    f"- Real-time notification\n"
+                    f"- Works with Azure Monitor Agent only"
                 ),
                 complexity=MigrationComplexity.SIMPLE,
-                confidence_score=0.85,
+                confidence_score=0.95,
                 prerequisites=[
                     "Azure Monitor Agent on target machines",
-                    "Data Collection Rule for System event log",
+                    "Data Collection Rule for System event log (Event ID 7036)",
                     "Log Analytics workspace",
+                    "DCR associations for targeting (replaces Computer Groups)",
                 ],
                 kql_query=kql_query_event_log,
+            ),
+            AzureMonitorRecommendation(
+                target_type=AzureMonitorTargetType.LOG_ALERT,
+                description=f"Monitor {service_name} service via custom PowerShell script (Alternative)",
+                implementation_notes=(
+                    f"**Alternative: Custom Service Monitoring Script:**\n\n"
+                    f"If you need more control than Event ID 7036 provides, use a custom PowerShell script:\n\n"
+                    f"**Option A: Azure Automation Runbook**\n"
+                    f"1. Create PowerShell runbook that queries service state\n"
+                    f"2. Write results to Log Analytics custom table\n"
+                    f"3. Schedule to run every 5 minutes\n\n"
+                    f"**Option B: Azure Monitor Agent with Custom Script**\n"
+                    f"1. Deploy PowerShell script to query service state\n"
+                    f"2. Write output to text file\n"
+                    f"3. Configure DCR to collect the custom log\n\n"
+                    f"**Sample PowerShell:**\n"
+                    f"```powershell\n"
+                    f"$service = Get-Service -Name '{service_name}' -ErrorAction SilentlyContinue\n"
+                    f"if ($service.Status -ne 'Running') {{\n"
+                    f"  # Write to custom log or send to Log Analytics\n"
+                    f"}}\n"
+                    f"```\n\n"
+                    f"**Note:** Event ID 7036 is simpler and recommended for most scenarios."
+                ),
+                complexity=MigrationComplexity.MODERATE,
+                confidence_score=0.7,
+                prerequisites=[
+                    "Azure Automation Account OR custom script deployment",
+                    "Log Analytics workspace with custom table",
+                ],
+                kql_query=f"""// Query custom service monitoring data
+ServiceMonitoring_CL
+| where TimeGenerated > ago(5m)
+| where ServiceName == "{service_name}"
+| where ServiceState != "Running"
+| project TimeGenerated, Computer, ServiceName, ServiceState""",
             ),
         ]
         
@@ -971,8 +1136,7 @@ In Azure Monitor, use these approaches to target equivalent machines:
         name: str,
     ) -> list[AzureMonitorRecommendation]:
         """Map Windows process monitoring to Azure Monitor - Same as service monitoring."""
-        # Use the process name from the data source if available
-        process_name = data_source.service_name or name.split()[-1] if name else "YourProcess.exe"
+        process_name = name.split()[-1] if name else "YourProcess.exe"
         
         # Generate KQL query for process monitoring
         kql_query = f"""// Monitor {process_name} process using Event Log (Azure Monitor Agent only)

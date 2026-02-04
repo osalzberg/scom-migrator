@@ -113,18 +113,16 @@ class AzureMonitorMapper:
         elif monitor.monitor_type == MonitorType.DEPENDENCY_MONITOR:
             recommendations.append(AzureMonitorRecommendation(
                 target_type=AzureMonitorTargetType.VM_INSIGHTS,
-                description="Use VM Insights with Azure Monitor Agent for dependency monitoring",
+                description="Use VM Insights with Azure Monitor Agent",
                 implementation_notes=(
-                    "**Azure VM Insights (Azure Monitor Agent ONLY - No Dependency Agent needed):**\n\n"
-                    "VM Insights with Azure Monitor Agent provides:\n"
+                    "**Azure VM Insights with Azure Monitor Agent:**\n\n"
+                    "VM Insights provides:\n"
                     "- Performance monitoring (CPU, memory, disk, network)\n"
                     "- Process inventory and discovery\n"
                     "- Heartbeat/availability monitoring\n"
-                    "- **Optional**: Service Map feature for network connection topology\n"
-                    "  (All via Azure Monitor Agent - no separate Dependency Agent!)\n\n"
+                    "- Service Map feature for network connection topology\n\n"
                     "**For application-level dependencies:**\n"
-                    "Use Application Insights with auto-instrumentation instead of VM-level dependency mapping.\n\n"
-                    "**IMPORTANT:** Dependency Agent is deprecated - do NOT use it!"
+                    "Use Application Insights with auto-instrumentation."
                 ),
                 complexity=MigrationComplexity.SIMPLE,
                 confidence_score=0.8,
@@ -319,9 +317,8 @@ class AzureMonitorMapper:
                     target_type=AzureMonitorTargetType.DATA_COLLECTION_RULE,
                     description="Monitor registry keys via Azure Monitor Agent custom script",
                     implementation_notes=(
-                        "**How to migrate Registry-based discovery to Azure:**\n\n"
-                        "⚠️ **Note:** Change Tracking via Automation Accounts is deprecated.\n\n"
-                        "**Modern Approach: PowerShell Script + DCR**\n"
+                "**How to migrate Registry-based discovery to Azure:**\n\n"
+                "**Modern Approach: PowerShell Script + DCR**\n"
                         "1. Create PowerShell script to query registry:\n"
                         "   ```powershell\n"
                         "   $regValue = Get-ItemProperty -Path 'HKLM:\\Your\\Path' -ErrorAction SilentlyContinue\n"
@@ -479,8 +476,6 @@ Heartbeat
             description="Use Azure Monitor Agent for software and service inventory",
             implementation_notes=(
                 "**Modern Inventory Collection via Azure Monitor Agent:**\n\n"
-                "⚠️ **Note:** Change Tracking via Automation Accounts is being deprecated.\n"
-                "Use these modern alternatives:\n\n"
                 "**Option 1: VM Insights (Recommended for Services)**\n"
                 "- Automatically collects running process/service inventory\n"
                 "- Uses InsightsMetrics and VMProcess tables\n"
@@ -528,7 +523,7 @@ CustomServiceInventory_CL
         
         manual_steps.extend([
             "1. Identify what resources the SCOM discovery was finding",
-            "2. Choose the appropriate Azure service (Resource Graph, VM Insights, or Change Tracking)",
+            "2. Choose the appropriate Azure service (Resource Graph or VM Insights)",
             "3. Enable the service and configure data collection",
             "4. Create KQL queries to retrieve the discovered data",
             "5. Optionally create Azure Workbooks to visualize the inventory",
@@ -547,9 +542,7 @@ CustomServiceInventory_CL
             migration_notes=[
                 "Azure provides multiple discovery mechanisms depending on what you need to discover",
                 "For Azure resources: Use Azure Resource Graph",
-                "For VM processes/dependencies: Use VM Insights",
-                "For software/services inventory: Use Change Tracking and Inventory",
-                "For custom discovery: Use Azure Automation or Azure Functions",
+                        "For custom discovery: Use Azure Automation or Azure Functions",
             ],
         )
     
@@ -578,10 +571,7 @@ Perf
 | where TimeGenerated > ago(1h)
 | summarize by Computer, ExecutableName
 
-// Use Change Tracking for software inventory:
-ConfigurationData
-| where ConfigDataType == "Software"
-| summarize arg_max(TimeGenerated, *) by SoftwareName, Computer"""
+"""
     
     def _map_data_source(
         self,
@@ -973,8 +963,10 @@ This is the modern replacement for SCOM classes and computer groups:
 **SECONDARY METHOD: Alert Query Scoping**
 Use this in addition to DCR associations for alert notification targeting:
 ```kql
-ConfigurationChange
-| where ConfigChangeType == "WindowsServices"
+Event
+| where EventLog == "System"
+| where Source == "Service Control Manager"
+| where EventID == 7036
 | where SvcName == "{service_name}"
 // Scope to specific machines using tags
 | join kind=inner (
@@ -1009,8 +1001,9 @@ Choose one of the targeting patterns from above (tag-based, resource group, or A
 4. **Modify KQL to target specific machines:**
    ```
    // Add computer filtering to match your SCOM target class
-   ConfigurationChange
-   | where ConfigChangeType == "WindowsServices"
+   Event
+   | where EventLog == "System"
+   | where EventID == 7036
    | where SvcName == "{service_name}"
    | where SvcState == "Stopped"
    // TARGET FILTERING - Choose one:
@@ -1046,7 +1039,6 @@ Choose one of the targeting patterns from above (tag-based, resource group, or A
                     f"**Why Event ID 7036:**\n"
                     f"- Logs ALL service state changes (start, stop, pause, continue)\n"
                     f"- Real-time notification\n"
-                    f"- No dependency on deprecated Change Tracking solution\n"
                     f"- Works with Azure Monitor Agent only"
                 ),
                 complexity=MigrationComplexity.SIMPLE,
