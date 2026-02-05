@@ -899,13 +899,43 @@ New-AzResourceGroupDeployment `
                 </div>
             `;
             
-            // Recommendations
+            // Recommendations - display with better formatting
             const recsDiv = document.getElementById('recommendations');
             recsDiv.innerHTML = data.overall_recommendations
                 .filter(rec => rec && rec.trim())
-                .map(rec => 
-                    `<div class="mb-2"><i class="bi bi-arrow-right-circle me-2 text-primary"></i>${rec}</div>`
-                ).join('');
+                .map(rec => {
+                    // Determine card style based on content
+                    let cardClass = 'border-start border-primary border-3';
+                    let bgClass = 'bg-light';
+                    
+                    if (rec.includes('⚠️') || rec.includes('UNSUPPORTED')) {
+                        cardClass = 'border-start border-warning border-3';
+                        bgClass = 'bg-warning bg-opacity-10';
+                    } else if (rec.includes('🔴') || rec.includes('Complex migration')) {
+                        cardClass = 'border-start border-danger border-3';
+                        bgClass = 'bg-danger bg-opacity-10';
+                    } else if (rec.includes('✅')) {
+                        cardClass = 'border-start border-success border-3';
+                        bgClass = 'bg-success bg-opacity-10';
+                    } else if (rec.includes('🏗️')) {
+                        cardClass = 'border-start border-info border-3';
+                        bgClass = 'bg-info bg-opacity-10';
+                    }
+                    
+                    // Format bullet points properly
+                    let formattedRec = rec
+                        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+                        .replace(/\n\s+•/g, '<br>&nbsp;&nbsp;•')
+                        .replace(/\n\s+(\d+\.)/g, '<br>&nbsp;&nbsp;$1')
+                        .replace(/   •/g, '<br>&nbsp;&nbsp;&nbsp;&nbsp;•')
+                        .replace(/   (\d+\.)/g, '<br>&nbsp;&nbsp;&nbsp;&nbsp;$1');
+                    
+                    return `<div class="card mb-2 ${cardClass}">
+                        <div class="card-body py-2 px-3 ${bgClass}">
+                            <small>${formattedRec}</small>
+                        </div>
+                    </div>`;
+                }).join('');
             
             // Prerequisites
             const prereqList = document.getElementById('prerequisites');

@@ -110,15 +110,13 @@ class MigrationAnalyzer:
         """Generate high-level recommendations for the migration."""
         recommendations = []
         
-        # Detect unsupported features
+        # Detect unsupported features - combine into single recommendation
         unsupported_features = self._detect_unsupported_features(mp, mappings)
         if unsupported_features:
+            features_text = "\n   • ".join(unsupported_features)
             recommendations.append(
-                "⚠️ **UNSUPPORTED FEATURES DETECTED**: The following SCOM features cannot be migrated automatically:"
+                f"⚠️ **UNSUPPORTED FEATURES DETECTED**: The following SCOM features cannot be migrated automatically:\n   • {features_text}"
             )
-            for feature in unsupported_features:
-                recommendations.append(f"   • {feature}")
-            recommendations.append("")
         
         # Check complexity distribution
         complexity_counts = {}
