@@ -1056,8 +1056,8 @@ New-AzResourceGroupDeployment `
             
             const recommendations = m.recommendations.map(r => `
                 <div class="mb-2">
-                    <span class="badge bg-primary badge-target me-2">${r.target_type}</span>
-                    <span>${r.description}</span>
+                    <span class="badge bg-primary badge-target me-2">${escapeHtml(r.target_type)}</span>
+                    <span>${escapeHtml(r.description)}</span>
                     ${r.implementation_notes && showDetails ? `
                         <details class="mt-2">
                             <summary class="text-muted small"><strong>📋 Implementation Steps</strong></summary>
@@ -1098,14 +1098,14 @@ New-AzResourceGroupDeployment `
             ` : '';
             
             return `
-                <div class="card mapping-card mb-2" data-type="${m.source_type}">
+                <div class="card mapping-card mb-2" data-type="${escapeHtml(m.source_type)}">
                     <div class="card-body py-2">
                         <div class="d-flex justify-content-between align-items-start">
                             <div>
-                                <span class="badge bg-info me-2">${m.source_type}</span>
-                                <strong>${m.source_name}</strong>
+                                <span class="badge bg-info me-2">${escapeHtml(m.source_type)}</span>
+                                <strong>${escapeHtml(m.source_name)}</strong>
                             </div>
-                            <span class="badge bg-${complexityClass}">${m.migration_complexity}</span>
+                            <span class="badge bg-${complexityClass}">${escapeHtml(m.migration_complexity)}</span>
                         </div>
                         <div class="mt-2">
                             ${recommendations}
@@ -1116,7 +1116,7 @@ New-AzResourceGroupDeployment `
                             <div class="mt-2">
                                 <small class="text-muted">
                                     <i class="bi bi-exclamation-triangle me-1"></i>
-                                    ${m.limitations[0]}
+                                    ${escapeHtml(m.limitations[0])}
                                 </small>
                             </div>
                         ` : ''}
