@@ -455,6 +455,20 @@
                                 <small id="mpVersion"></small>
                             </div>
                             
+                            <!-- Migration Readiness -->
+                            <div class="card mb-4 border-0 shadow-sm">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <h6 class="mb-0"><i class="bi bi-speedometer2 me-2"></i>Migration Readiness</h6>
+                                        <span class="badge bg-primary fs-6" id="readinessPercent">0%</span>
+                                    </div>
+                                    <div class="progress" style="height: 12px;">
+                                        <div class="progress-bar bg-success" id="readinessBar" role="progressbar" style="width: 0%"></div>
+                                    </div>
+                                    <small class="text-muted mt-2 d-block" id="readinessText">Calculating...</small>
+                                </div>
+                            </div>
+                            
                             <!-- Stats -->
                             <div class="row g-3 mb-4">
                                 <div class="col-md-4 col-sm-6">
@@ -543,13 +557,21 @@
                             
                             <!-- All Component Mappings -->
                             <div class="card mb-4">
-                                <div class="card-header bg-light d-flex justify-content-between align-items-center flex-wrap">
-                                    <h6 class="mb-0"><i class="bi bi-diagram-3 me-2"></i>All Component Mappings</h6>
-                                    <div class="btn-group btn-group-sm mt-2 mt-md-0">
-                                        <button class="btn btn-outline-secondary active" onclick="filterMappings('all')">All</button>
-                                        <button class="btn btn-outline-secondary" onclick="filterMappings('Monitor')">Monitors</button>
-                                        <button class="btn btn-outline-secondary" onclick="filterMappings('Rule')">Rules</button>
-                                        <button class="btn btn-outline-secondary" onclick="filterMappings('Discovery')">Discoveries</button>
+                                <div class="card-header bg-light">
+                                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                        <h6 class="mb-0"><i class="bi bi-diagram-3 me-2"></i>All Component Mappings</h6>
+                                        <div class="d-flex gap-2 flex-wrap align-items-center">
+                                            <div class="input-group input-group-sm" style="width: 200px;">
+                                                <span class="input-group-text"><i class="bi bi-search"></i></span>
+                                                <input type="text" class="form-control" id="searchMappings" placeholder="Search..." oninput="searchMappings()">
+                                            </div>
+                                            <div class="btn-group btn-group-sm">
+                                                <button class="btn btn-outline-secondary active" onclick="filterMappings('all')">All</button>
+                                                <button class="btn btn-outline-secondary" onclick="filterMappings('Monitor')">Monitors</button>
+                                                <button class="btn btn-outline-secondary" onclick="filterMappings('Rule')">Rules</button>
+                                                <button class="btn btn-outline-secondary" onclick="filterMappings('Discovery')">Discoveries</button>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                                 <div class="card-body" style="max-height: 500px; overflow-y: auto;">
@@ -881,26 +903,72 @@ New-AzResourceGroupDeployment `
             animateValue('migratableCount', 0, data.migratable_components, 1000);
             animateValue('manualCount', 0, data.requires_manual_review, 1000);
             
-            // Complexity breakdown
+            // Migration Readiness
+            const total = data.total_components || 1;
+            const migratable = data.migratable_components || 0;
+            const readinessPercent = Math.round((migratable / total) * 100);
+            document.getElementById('readinessPercent').textContent = readinessPercent + '%';
+            document.getElementById('readinessBar').style.width = readinessPercent + '%';
+            
+            // Set color based on percentage
+            const readinessBar = document.getElementById('readinessBar');
+            if (readinessPercent >= 70) {
+                readinessBar.className = 'progress-bar bg-success';
+                document.getElementById('readinessText').textContent = `${migratable} of ${total} components can be migrated with Simple or Moderate effort`;
+            } else if (readinessPercent >= 40) {
+                readinessBar.className = 'progress-bar bg-warning';
+                document.getElementById('readinessText').textContent = `${migratable} of ${total} components are easily migratable. Plan additional time for the rest.`;
+            } else {
+                readinessBar.className = 'progress-bar bg-danger';
+                document.getElementById('readinessText').textContent = `Only ${migratable} of ${total} components are easily migratable. Consider a phased approach.`;
+            }
+            
+            // Complexity breakdown with visual bars
             const stats = data.stats || {};
             const complexityDiv = document.getElementById('complexityBreakdown');
             const breakdown = stats.complexity_breakdown || {};
+            const simpleCount = breakdown.simple || 0;
+            const moderateCount = breakdown.moderate || 0;
+            const complexCount = breakdown.complex || 0;
+            const manualCount = breakdown.manual || 0;
+            const maxCount = Math.max(simpleCount, moderateCount, complexCount, manualCount, 1);
+            
             complexityDiv.innerHTML = `
-                <div class="col-3">
-                    <h4 class="complexity-simple">${breakdown.simple || 0}</h4>
-                    <small>Simple</small>
+                <div class="col-6 col-md-3 mb-3">
+                    <div class="text-center">
+                        <h4 class="complexity-simple mb-1">${simpleCount}</h4>
+                        <div class="progress mb-1" style="height: 6px;">
+                            <div class="progress-bar" style="width: ${(simpleCount/maxCount)*100}%; background-color: #107c10;"></div>
+                        </div>
+                        <small class="text-muted">Simple</small>
+                    </div>
                 </div>
-                <div class="col-3">
-                    <h4 class="complexity-moderate">${breakdown.moderate || 0}</h4>
-                    <small>Moderate</small>
+                <div class="col-6 col-md-3 mb-3">
+                    <div class="text-center">
+                        <h4 class="complexity-moderate mb-1">${moderateCount}</h4>
+                        <div class="progress mb-1" style="height: 6px;">
+                            <div class="progress-bar" style="width: ${(moderateCount/maxCount)*100}%; background-color: #0078d4;"></div>
+                        </div>
+                        <small class="text-muted">Moderate</small>
+                    </div>
                 </div>
-                <div class="col-3">
-                    <h4 class="complexity-complex">${breakdown.complex || 0}</h4>
-                    <small>Complex</small>
+                <div class="col-6 col-md-3 mb-3">
+                    <div class="text-center">
+                        <h4 class="complexity-complex mb-1">${complexCount}</h4>
+                        <div class="progress mb-1" style="height: 6px;">
+                            <div class="progress-bar" style="width: ${(complexCount/maxCount)*100}%; background-color: #ff8c00;"></div>
+                        </div>
+                        <small class="text-muted">Complex</small>
+                    </div>
                 </div>
-                <div class="col-3">
-                    <h4 class="complexity-manual">${breakdown.manual || 0}</h4>
-                    <small>Manual</small>
+                <div class="col-6 col-md-3 mb-3">
+                    <div class="text-center">
+                        <h4 class="complexity-manual mb-1">${manualCount}</h4>
+                        <div class="progress mb-1" style="height: 6px;">
+                            <div class="progress-bar" style="width: ${(manualCount/maxCount)*100}%; background-color: #d13438;"></div>
+                        </div>
+                        <small class="text-muted">Manual</small>
+                    </div>
                 </div>
             `;
             
@@ -1171,11 +1239,38 @@ New-AzResourceGroupDeployment `
             document.querySelectorAll('.btn-group .btn').forEach(btn => btn.classList.remove('active'));
             event.target.classList.add('active');
             
-            if (type === 'all') {
-                displayMappings(allMappings);
-            } else {
-                displayMappings(allMappings.filter(m => m.source_type === type));
+            currentFilter = type;
+            applyFilters();
+        }
+        
+        let currentFilter = 'all';
+        let currentSearch = '';
+        
+        function searchMappings() {
+            currentSearch = document.getElementById('searchMappings').value.toLowerCase();
+            applyFilters();
+        }
+        
+        function applyFilters() {
+            let filtered = allMappings;
+            
+            // Apply type filter
+            if (currentFilter !== 'all') {
+                filtered = filtered.filter(m => m.source_type === currentFilter);
             }
+            
+            // Apply search filter
+            if (currentSearch) {
+                filtered = filtered.filter(m => 
+                    m.source_name.toLowerCase().includes(currentSearch) ||
+                    m.source_id.toLowerCase().includes(currentSearch) ||
+                    (m.recommendations && m.recommendations.some(r => 
+                        r.description && r.description.toLowerCase().includes(currentSearch)
+                    ))
+                );
+            }
+            
+            displayMappings(filtered);
         }
         
         function escapeHtml(text) {
