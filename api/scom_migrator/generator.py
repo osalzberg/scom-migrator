@@ -171,6 +171,9 @@ class ARMTemplateGenerator:
                     }
                 },
             },
+            variables={
+                "workspaceId": "[parameters('workspaceResourceId')]"
+            },
         )
         
         # Collect unique data sources from recommendations
@@ -528,10 +531,8 @@ class ARMTemplateGenerator:
             name=name,
             location=location,
             properties=properties,
-            depends_on=["[variables('workspaceId')]"],
             tags={
                 "source": "SCOM Migration",
-                "environment": "[parameters('environment')]"
             }
         )
     

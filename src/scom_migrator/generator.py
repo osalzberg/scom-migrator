@@ -566,10 +566,8 @@ class ARMTemplateGenerator:
             name=name,
             location=location,
             properties=properties,
-            depends_on=["[variables('workspaceId')]"],
             tags={
                 "source": "SCOM Migration",
-                "environment": "[parameters('environment')]"
             }
         )
     
