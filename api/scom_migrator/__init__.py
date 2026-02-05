@@ -4,7 +4,7 @@ SCOM to Azure Monitor Migration Tool
 This package provides tools to migrate SCOM Management Packs to Azure Monitor.
 """
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 __author__ = "SCOM Migrator Team"
 
 from .parser import ManagementPackParser

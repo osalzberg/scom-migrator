@@ -334,6 +334,7 @@ class ARMResource(BaseModel):
     api_version: str
     name: str
     location: str = "[resourceGroup().location]"
+    kind: Optional[str] = None  # For resources that need kind (e.g., DCR: "Windows" or "Linux")
     properties: dict[str, Any] = Field(default_factory=dict)
     depends_on: list[str] = Field(default_factory=list)
     tags: dict[str, str] = Field(default_factory=dict)
@@ -350,22 +351,27 @@ class ARMTemplate(BaseModel):
     
     def to_dict(self) -> dict[str, Any]:
         """Convert to ARM template dictionary format."""
+        resources = []
+        for r in self.resources:
+            resource_dict = {
+                "type": r.type,
+                "apiVersion": r.api_version,
+                "name": r.name,
+                "location": r.location,
+                "properties": r.properties,
+                "dependsOn": r.depends_on,
+                "tags": r.tags,
+            }
+            # Add kind if present (required for DCRs)
+            if r.kind:
+                resource_dict["kind"] = r.kind
+            resources.append(resource_dict)
+        
         return {
             "$schema": self.schema_url,
             "contentVersion": self.content_version,
             "parameters": self.parameters,
             "variables": self.variables,
-            "resources": [
-                {
-                    "type": r.type,
-                    "apiVersion": r.api_version,
-                    "name": r.name,
-                    "location": r.location,
-                    "properties": r.properties,
-                    "dependsOn": r.depends_on,
-                    "tags": r.tags,
-                }
-                for r in self.resources
-            ],
+            "resources": resources,
             "outputs": self.outputs,
         }

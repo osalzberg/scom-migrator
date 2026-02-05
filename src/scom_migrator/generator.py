@@ -239,9 +239,16 @@ class ARMTemplateGenerator:
             "logTier": {
                 "type": "string",
                 "defaultValue": "Basic",
-                "allowedValues": ["Analytics", "Basic", "Auxiliary"],
+                "allowedValues": ["Analytics", "Basic"],
                 "metadata": {
-                    "description": "Log tier for data collection: Analytics ($3/GB, real-time), Basic ($0.50/GB, 83% cheaper), Auxiliary ($0.05/GB, archival)"
+                    "description": "Log tier for data collection: Analytics ($3/GB, real-time alerts), Basic ($0.50/GB, 83% cheaper, delayed alerts). Note: Auxiliary tier ($0.05/GB) cannot be used for alerting."
+                }
+            },
+            "targetVmResourceIds": {
+                "type": "array",
+                "defaultValue": [],
+                "metadata": {
+                    "description": "Array of VM resource IDs to monitor. Example: ['/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Compute/virtualMachines/{vm}']"
                 }
             },
         }
@@ -472,7 +479,7 @@ class ARMTemplateGenerator:
         location: str,
         perf_counters: list[tuple[str, str, str]],
         event_logs: list[str],
-        log_tier: str = "Basic",  # Default to Basic tier for cost optimization
+        log_tier: str = "[parameters('logTier')]",  # Use parameter for log tier
     ) -> ARMResource:
         """
         Create a Data Collection Rule resource.
@@ -482,22 +489,13 @@ class ARMTemplateGenerator:
             location: Azure region
             perf_counters: List of performance counters to collect
             event_logs: List of event logs to collect
-            log_tier: Log tier - "Basic" (default, 83% cheaper), "Analytics", or "Auxiliary"
+            log_tier: Log tier - defaults to template parameter
         """
         data_flows = []
         data_sources = {}
         
         # Performance counters
         if perf_counters:
-            perf_specs = []
-            for obj, counter, instance in perf_counters:
-                perf_specs.append({
-                    "objectName": obj,
-                    "counterName": counter,
-                    "instanceName": instance,
-                    "samplingFrequencyInSeconds": 60
-                })
-            
             data_sources["performanceCounters"] = [
                 {
                     "name": "perfCounterDataSource",
@@ -511,8 +509,7 @@ class ARMTemplateGenerator:
             ]
             data_flows.append({
                 "streams": ["Microsoft-Perf"],
-                "destinations": ["logAnalyticsWorkspace"],
-                "transformKql": "source | project TimeGenerated, Computer, ObjectName, CounterName, InstanceName, CounterValue"
+                "destinations": ["logAnalyticsWorkspace"]
             })
         
         # Windows events
@@ -529,35 +526,22 @@ class ARMTemplateGenerator:
             ]
             data_flows.append({
                 "streams": ["Microsoft-Event"],
-                "destinations": ["logAnalyticsWorkspace"],
-                "transformKql": "source | project TimeGenerated, Computer, EventID, EventLevel, EventLevelName, EventData"
+                "destinations": ["logAnalyticsWorkspace"]
             })
         
         properties = {
-            "description": f"Data Collection Rule migrated from SCOM (Log tier: {log_tier})",
+            "description": f"Data Collection Rule migrated from SCOM - Log tier controlled by template parameter",
+            "kind": "Windows",  # CRITICAL: Must specify Windows or Linux
             "dataSources": data_sources,
             "destinations": {
                 "logAnalytics": [
                     {
                         "name": "logAnalyticsWorkspace",
-                        "workspaceResourceId": "[parameters('workspaceResourceId')]",
-                        "tableMode": log_tier  # "Basic", "Analytics", or "Auxiliary"
+                        "workspaceResourceId": "[parameters('workspaceResourceId')]"
                     }
                 ]
             },
-            "dataFlows": data_flows,
-            "streamDeclarations": {
-                "Custom-Perf": {
-                    "columns": [
-                        {"name": "TimeGenerated", "type": "datetime"},
-                        {"name": "Computer", "type": "string"},
-                        {"name": "ObjectName", "type": "string"},
-                        {"name": "CounterName", "type": "string"},
-                        {"name": "InstanceName", "type": "string"},
-                        {"name": "CounterValue", "type": "real"}
-                    ]
-                }
-            }
+            "dataFlows": data_flows
         }
         
         return ARMResource(
@@ -565,9 +549,11 @@ class ARMTemplateGenerator:
             api_version=self.API_VERSIONS["Microsoft.Insights/dataCollectionRules"],
             name=name,
             location=location,
+            kind="Windows",  # CRITICAL: Must be set at resource level too
             properties=properties,
             tags={
                 "source": "SCOM Migration",
+                "logTier": log_tier,
             }
         )
     

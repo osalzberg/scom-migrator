@@ -129,12 +129,12 @@ class ARMTemplateGenerator:
         
         for mapping in report.mappings:
             if mapping.can_migrate:
-                for rec in mapping.recommendations:
+                for index, rec in enumerate(mapping.recommendations):
                     if rec.target_type in [
                         AzureMonitorTargetType.METRIC_ALERT,
                         AzureMonitorTargetType.LOG_ALERT,
                     ]:
-                        resource = self._create_alert_resource(mapping, rec, location)
+                        resource = self._create_alert_resource(mapping, rec, location, index)
                         if resource:
                             template.resources.append(resource)
         
@@ -236,6 +236,21 @@ class ARMTemplateGenerator:
                     "description": "Environment tag for resources"
                 }
             },
+            "logTier": {
+                "type": "string",
+                "defaultValue": "Basic",
+                "allowedValues": ["Analytics", "Basic"],
+                "metadata": {
+                    "description": "Log tier for data collection: Analytics ($3/GB, real-time alerts), Basic ($0.50/GB, 83% cheaper, delayed alerts). Note: Auxiliary tier ($0.05/GB) cannot be used for alerting."
+                }
+            },
+            "targetVmResourceIds": {
+                "type": "array",
+                "defaultValue": [],
+                "metadata": {
+                    "description": "Array of VM resource IDs to monitor. Example: ['/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Compute/virtualMachines/{vm}']"
+                }
+            },
         }
     
     def _generate_variables(self, report: MigrationReport) -> dict[str, Any]:
@@ -318,8 +333,8 @@ class ARMTemplateGenerator:
         """Generate ARM resources from a mapping."""
         resources = []
         
-        for rec in mapping.recommendations:
-            resource = self._create_resource_from_recommendation(mapping, rec, location)
+        for index, rec in enumerate(mapping.recommendations):
+            resource = self._create_resource_from_recommendation(mapping, rec, location, index)
             if resource:
                 resources.append(resource)
         
@@ -330,12 +345,13 @@ class ARMTemplateGenerator:
         mapping: MigrationMapping,
         rec: AzureMonitorRecommendation,
         location: str,
+        index: int = 0,
     ) -> Optional[ARMResource]:
         """Create an ARM resource from a recommendation."""
         if rec.target_type == AzureMonitorTargetType.METRIC_ALERT:
-            return self._create_metric_alert(mapping, rec, location)
+            return self._create_metric_alert(mapping, rec, location, index)
         elif rec.target_type == AzureMonitorTargetType.LOG_ALERT:
-            return self._create_log_alert(mapping, rec, location)
+            return self._create_log_alert(mapping, rec, location, index)
         elif rec.target_type == AzureMonitorTargetType.DATA_COLLECTION_RULE:
             return None  # DCRs are consolidated separately
         
@@ -346,12 +362,13 @@ class ARMTemplateGenerator:
         mapping: MigrationMapping,
         rec: AzureMonitorRecommendation,
         location: str,
+        index: int = 0,
     ) -> Optional[ARMResource]:
         """Create an alert resource."""
         if rec.target_type == AzureMonitorTargetType.METRIC_ALERT:
-            return self._create_metric_alert(mapping, rec, location)
+            return self._create_metric_alert(mapping, rec, location, index)
         elif rec.target_type == AzureMonitorTargetType.LOG_ALERT:
-            return self._create_log_alert(mapping, rec, location)
+            return self._create_log_alert(mapping, rec, location, index)
         return None
     
     def _create_metric_alert(
@@ -359,10 +376,11 @@ class ARMTemplateGenerator:
         mapping: MigrationMapping,
         rec: AzureMonitorRecommendation,
         location: str,
+        index: int = 0,
     ) -> ARMResource:
         """Create a metric alert resource."""
-        # Sanitize name for Azure resource naming
-        safe_name = self._sanitize_resource_name(mapping.source_name)
+        # Sanitize name for Azure resource naming and make it unique
+        safe_name = self._sanitize_resource_name(f"{mapping.source_name}-{index}")
         
         # Use ARM snippet if provided, otherwise create default
         properties = rec.arm_template_snippet.get("properties", {}) if rec.arm_template_snippet else {}
@@ -404,9 +422,10 @@ class ARMTemplateGenerator:
         mapping: MigrationMapping,
         rec: AzureMonitorRecommendation,
         location: str,
+        index: int = 0,
     ) -> ARMResource:
         """Create a log alert (scheduled query rule) resource."""
-        safe_name = self._sanitize_resource_name(mapping.source_name)
+        safe_name = self._sanitize_resource_name(f"{mapping.source_name}-{index}")
         
         # Get KQL query from recommendation
         query = rec.kql_query or "// TODO: Add KQL query"
@@ -460,22 +479,23 @@ class ARMTemplateGenerator:
         location: str,
         perf_counters: list[tuple[str, str, str]],
         event_logs: list[str],
+        log_tier: str = "[parameters('logTier')]",  # Use parameter for log tier
     ) -> ARMResource:
-        """Create a Data Collection Rule resource."""
+        """
+        Create a Data Collection Rule resource.
+        
+        Args:
+            name: Name of the DCR
+            location: Azure region
+            perf_counters: List of performance counters to collect
+            event_logs: List of event logs to collect
+            log_tier: Log tier - defaults to template parameter
+        """
         data_flows = []
         data_sources = {}
         
         # Performance counters
         if perf_counters:
-            perf_specs = []
-            for obj, counter, instance in perf_counters:
-                perf_specs.append({
-                    "objectName": obj,
-                    "counterName": counter,
-                    "instanceName": instance,
-                    "samplingFrequencyInSeconds": 60
-                })
-            
             data_sources["performanceCounters"] = [
                 {
                     "name": "perfCounterDataSource",
@@ -489,8 +509,7 @@ class ARMTemplateGenerator:
             ]
             data_flows.append({
                 "streams": ["Microsoft-Perf"],
-                "destinations": ["logAnalyticsWorkspace"],
-                "transformKql": "source | project TimeGenerated, Computer, ObjectName, CounterName, InstanceName, CounterValue"
+                "destinations": ["logAnalyticsWorkspace"]
             })
         
         # Windows events
@@ -507,12 +526,12 @@ class ARMTemplateGenerator:
             ]
             data_flows.append({
                 "streams": ["Microsoft-Event"],
-                "destinations": ["logAnalyticsWorkspace"],
-                "transformKql": "source | project TimeGenerated, Computer, EventID, EventLevel, EventLevelName, EventData"
+                "destinations": ["logAnalyticsWorkspace"]
             })
         
         properties = {
-            "description": "Data Collection Rule migrated from SCOM",
+            "description": f"Data Collection Rule migrated from SCOM - Log tier controlled by template parameter",
+            "kind": "Windows",  # CRITICAL: Must specify Windows or Linux
             "dataSources": data_sources,
             "destinations": {
                 "logAnalytics": [
@@ -530,9 +549,11 @@ class ARMTemplateGenerator:
             api_version=self.API_VERSIONS["Microsoft.Insights/dataCollectionRules"],
             name=name,
             location=location,
+            kind="Windows",  # CRITICAL: Must be set at resource level too
             properties=properties,
             tags={
                 "source": "SCOM Migration",
+                "logTier": log_tier,
             }
         )
     
