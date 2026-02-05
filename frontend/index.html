@@ -912,55 +912,6 @@ New-AzResourceGroupDeployment `
                 document.getElementById('readinessText').textContent = `Only ${migratable} of ${total} components are easily migratable. Consider a phased approach.`;
             }
             
-            // Complexity breakdown with visual bars
-            const stats = data.stats || {};
-            const complexityDiv = document.getElementById('complexityBreakdown');
-            const breakdown = stats.complexity_breakdown || {};
-            const simpleCount = breakdown.simple || 0;
-            const moderateCount = breakdown.moderate || 0;
-            const complexCount = breakdown.complex || 0;
-            const manualCount = breakdown.manual || 0;
-            const maxCount = Math.max(simpleCount, moderateCount, complexCount, manualCount, 1);
-            
-            complexityDiv.innerHTML = `
-                <div class="col-6 col-md-3 mb-3">
-                    <div class="text-center">
-                        <h4 class="complexity-simple mb-1">${simpleCount}</h4>
-                        <div class="progress mb-1" style="height: 6px;">
-                            <div class="progress-bar" style="width: ${(simpleCount/maxCount)*100}%; background-color: #107c10;"></div>
-                        </div>
-                        <small class="text-muted">Simple</small>
-                    </div>
-                </div>
-                <div class="col-6 col-md-3 mb-3">
-                    <div class="text-center">
-                        <h4 class="complexity-moderate mb-1">${moderateCount}</h4>
-                        <div class="progress mb-1" style="height: 6px;">
-                            <div class="progress-bar" style="width: ${(moderateCount/maxCount)*100}%; background-color: #0078d4;"></div>
-                        </div>
-                        <small class="text-muted">Moderate</small>
-                    </div>
-                </div>
-                <div class="col-6 col-md-3 mb-3">
-                    <div class="text-center">
-                        <h4 class="complexity-complex mb-1">${complexCount}</h4>
-                        <div class="progress mb-1" style="height: 6px;">
-                            <div class="progress-bar" style="width: ${(complexCount/maxCount)*100}%; background-color: #ff8c00;"></div>
-                        </div>
-                        <small class="text-muted">Complex</small>
-                    </div>
-                </div>
-                <div class="col-6 col-md-3 mb-3">
-                    <div class="text-center">
-                        <h4 class="complexity-manual mb-1">${manualCount}</h4>
-                        <div class="progress mb-1" style="height: 6px;">
-                            <div class="progress-bar" style="width: ${(manualCount/maxCount)*100}%; background-color: #d13438;"></div>
-                        </div>
-                        <small class="text-muted">Manual</small>
-                    </div>
-                </div>
-            `;
-            
             // Recommendations - display with better formatting
             const recsDiv = document.getElementById('recommendations');
             recsDiv.innerHTML = data.overall_recommendations
