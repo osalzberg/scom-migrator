@@ -1080,12 +1080,15 @@ Choose one of the targeting patterns from above (tag-based, resource group, or A
                     "Azure Automation Account OR custom script deployment",
                     "Log Analytics workspace with custom table",
                 ],
-                kql_query=f"""// Query custom service monitoring data
-ServiceMonitoring_CL
+                kql_query=f"""// Alternative: Query Windows Event Log for service state changes
+// This uses the same Event table as the primary recommendation
+Event
 | where TimeGenerated > ago(5m)
-| where ServiceName == "{service_name}"
-| where ServiceState != "Running"
-| project TimeGenerated, Computer, ServiceName, ServiceState""",
+| where EventLog == "System"
+| where EventID == 7036
+| where RenderedDescription contains "{service_name}"
+| where RenderedDescription contains "stopped" or RenderedDescription contains "entered the stopped state"
+| project TimeGenerated, Computer, EventID, RenderedDescription""",
             ),
         ]
         
