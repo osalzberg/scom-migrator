@@ -488,23 +488,33 @@
                                 </div>
                             </div>
                             
-                            <!-- Recommendations -->
+                            <!-- Recommendations - Collapsible -->
                             <div class="card mb-4">
-                                <div class="card-header bg-light">
-                                    <h6 class="mb-0"><i class="bi bi-lightbulb me-2"></i>Key Recommendations</h6>
+                                <div class="card-header bg-light" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#recommendationsCollapse">
+                                    <h6 class="mb-0 d-flex justify-content-between align-items-center">
+                                        <span><i class="bi bi-lightbulb me-2"></i>Key Recommendations</span>
+                                        <i class="bi bi-chevron-down"></i>
+                                    </h6>
                                 </div>
-                                <div class="card-body">
-                                    <div id="recommendations"></div>
+                                <div class="collapse" id="recommendationsCollapse">
+                                    <div class="card-body">
+                                        <div id="recommendations"></div>
+                                    </div>
                                 </div>
                             </div>
                             
-                            <!-- Prerequisites -->
+                            <!-- Prerequisites - Collapsible -->
                             <div class="card mb-4">
-                                <div class="card-header bg-light">
-                                    <h6 class="mb-0"><i class="bi bi-check2-square me-2"></i>Prerequisites</h6>
+                                <div class="card-header bg-light" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#prerequisitesCollapse">
+                                    <h6 class="mb-0 d-flex justify-content-between align-items-center">
+                                        <span><i class="bi bi-list-check me-2"></i>Prerequisites</span>
+                                        <i class="bi bi-chevron-down"></i>
+                                    </h6>
                                 </div>
-                                <div class="card-body">
-                                    <ul class="prereq-list" id="prerequisites"></ul>
+                                <div class="collapse" id="prerequisitesCollapse">
+                                    <div class="card-body">
+                                        <ul class="list-unstyled mb-0" id="prerequisites"></ul>
+                                    </div>
                                 </div>
                             </div>
                             
@@ -942,7 +952,7 @@ New-AzResourceGroupDeployment `
             prereqList.innerHTML = data.prerequisites.slice(0, 10)
                 .filter(p => p && p.trim())
                 .map(p => 
-                    `<li>${p}</li>`
+                    `<li class="mb-1"><i class="bi bi-dash me-2 text-muted"></i>${p}</li>`
                 ).join('');
             
             // Mappings - separate easy vs manual
