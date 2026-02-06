@@ -1164,6 +1164,7 @@ class ARMTemplateGenerator:
         # Combine variables - use conditional for workspace resource ID
         combined_vars = {
             "actualWorkspaceResourceId": "[if(parameters('createNewWorkspace'), resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspaceName')), parameters('workspaceResourceId'))]",
+            "workspaceId": "[if(parameters('createNewWorkspace'), resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspaceName')), parameters('workspaceResourceId'))]",
             "actionGroupId": "[resourceId('Microsoft.Insights/actionGroups', parameters('actionGroupName'))]",
             "customTableName": f"Custom_{mp_name}_CL"
         }
