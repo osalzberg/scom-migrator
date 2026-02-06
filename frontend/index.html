@@ -552,40 +552,67 @@
                                 </div>
                             </div>
                             
-                            <!-- Easily Migratable Components -->
+                            <!-- Easily Migratable Components - INCLUDED IN DOWNLOAD -->
                             <div class="card mb-4 border-success" id="easyMigrationCard" style="display: none;">
-                                <div class="card-header bg-success text-white">
-                                    <h6 class="mb-0"><i class="bi bi-check-circle me-2"></i>Easily Migratable Components (Quick Wins)</h6>
+                                <div class="card-header bg-success text-white d-flex justify-content-between align-items-center" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#easyMigrationCollapse">
+                                    <h6 class="mb-0">
+                                        <i class="bi bi-check-circle me-2"></i>
+                                        ✅ Auto-Migrated Components 
+                                        <span class="badge bg-white text-success ms-2" id="easyCount">0</span>
+                                    </h6>
+                                    <div>
+                                        <span class="badge bg-white text-success me-2">Included in Download</span>
+                                        <i class="bi bi-chevron-down"></i>
+                                    </div>
                                 </div>
-                                <div class="card-body">
-                                    <p class="text-muted small mb-3">
-                                        <i class="bi bi-info-circle me-1"></i>
-                                        These components can be migrated with minimal effort. Start here for quick wins!
-                                    </p>
-                                    <div id="easyMappings"></div>
-                                </div>
-                            </div>
-                            
-                            <!-- Components Requiring Manual Review -->
-                            <div class="card mb-4 border-warning" id="manualReviewCard" style="display: none;">
-                                <div class="card-header bg-warning text-white">
-                                    <h6 class="mb-0"><i class="bi bi-exclamation-triangle me-2"></i>Components Requiring Manual Review</h6>
-                                </div>
-                                <div class="card-body">
-                                    <p class="text-muted small mb-3">
-                                        <i class="bi bi-info-circle me-1"></i>
-                                        These components need manual analysis and custom implementation.
-                                    </p>
-                                    <div id="manualMappings"></div>
+                                <div class="collapse show" id="easyMigrationCollapse">
+                                    <div class="card-body">
+                                        <div class="alert alert-success mb-3" style="border-left: 4px solid #198754;">
+                                            <i class="bi bi-info-circle me-2"></i>
+                                            <strong>These components are covered by the downloaded ARM templates.</strong>
+                                            Deploy the All-in-One template to set up alerts, DCRs, and workbooks for all these items.
+                                        </div>
+                                        <div id="easyMappings" style="max-height: 400px; overflow-y: auto;"></div>
+                                    </div>
                                 </div>
                             </div>
                             
-                            <!-- All Component Mappings -->
+                            <!-- Components NOT Auto-Migrated -->
+                            <div class="card mb-4 border-danger" id="manualReviewCard" style="display: none;">
+                                <div class="card-header bg-danger text-white d-flex justify-content-between align-items-center" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#manualReviewCollapse">
+                                    <h6 class="mb-0">
+                                        <i class="bi bi-exclamation-octagon me-2"></i>
+                                        ⚠️ Requires Manual Migration
+                                        <span class="badge bg-white text-danger ms-2" id="manualCount2">0</span>
+                                    </h6>
+                                    <div>
+                                        <span class="badge bg-white text-danger me-2">NOT in Download</span>
+                                        <i class="bi bi-chevron-down"></i>
+                                    </div>
+                                </div>
+                                <div class="collapse show" id="manualReviewCollapse">
+                                    <div class="card-body">
+                                        <div class="alert alert-danger mb-3" style="border-left: 4px solid #dc3545;">
+                                            <i class="bi bi-exclamation-triangle me-2"></i>
+                                            <strong>These components require manual implementation.</strong>
+                                            They may involve custom scripts, complex logic, or unsupported features that need human review.
+                                        </div>
+                                        <div id="manualMappings" style="max-height: 400px; overflow-y: auto;"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- All Component Mappings - Collapsed by default -->
                             <div class="card mb-4">
-                                <div class="card-header bg-light">
-                                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                                        <h6 class="mb-0"><i class="bi bi-diagram-3 me-2"></i>All Component Mappings</h6>
-                                        <div class="d-flex gap-2 flex-wrap align-items-center">
+                                <div class="card-header bg-light" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#allMappingsCollapse">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <h6 class="mb-0"><i class="bi bi-diagram-3 me-2"></i>All Component Mappings (Details)</h6>
+                                        <i class="bi bi-chevron-down"></i>
+                                    </div>
+                                </div>
+                                <div class="collapse" id="allMappingsCollapse">
+                                    <div class="card-body">
+                                        <div class="d-flex gap-2 flex-wrap align-items-center mb-3">
                                             <div class="input-group input-group-sm" style="width: 200px;">
                                                 <span class="input-group-text"><i class="bi bi-search"></i></span>
                                                 <input type="text" class="form-control" id="searchMappings" placeholder="Search..." oninput="searchMappings()">
@@ -597,10 +624,8 @@
                                                 <button class="btn btn-outline-secondary" onclick="filterMappings('Discovery')">Discoveries</button>
                                             </div>
                                         </div>
+                                        <div id="mappings" style="max-height: 500px; overflow-y: auto;"></div>
                                     </div>
-                                </div>
-                                <div class="card-body" style="max-height: 500px; overflow-y: auto;">
-                                    <div id="mappings"></div>
                                 </div>
                             </div>
                             
@@ -1100,11 +1125,13 @@ New-AzResourceGroupDeployment `
             
             if (easyMappings.length > 0) {
                 document.getElementById('easyMigrationCard').style.display = 'block';
+                document.getElementById('easyCount').textContent = easyMappings.length;
                 document.getElementById('easyMappings').innerHTML = easyMappings.map(m => createMappingCard(m, true)).join('');
             }
             
             if (manualMappings.length > 0) {
                 document.getElementById('manualReviewCard').style.display = 'block';
+                document.getElementById('manualCount2').textContent = manualMappings.length;
                 document.getElementById('manualMappings').innerHTML = manualMappings.map(m => createMappingCard(m, true)).join('');
             }
         }
