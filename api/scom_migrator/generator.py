@@ -1205,9 +1205,14 @@ class ARMTemplateGenerator:
         for res in arm_template.get("resources", []):
             if res.get("type") == "Microsoft.Insights/scheduledQueryRules":
                 alert_res = res.copy()
-                # Add conditional dependency on workspace
-                alert_res["dependsOn"] = alert_res.get("dependsOn", []) + [
-                    "[if(parameters('createNewWorkspace'), resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspaceName')), '')]"
+                # Add dependency on workspace only if creating new
+                existing_deps = [d for d in alert_res.get("dependsOn", []) if d]
+                alert_res["dependsOn"] = existing_deps + [
+                    "[concat('Microsoft.OperationalInsights/workspaces/', parameters('workspaceName'))]"
+                ] if True else existing_deps  # Always add, ARM handles non-existent gracefully when condition is false
+                # Use condition to only depend when creating new
+                alert_res["dependsOn"] = [
+                    "[if(parameters('createNewWorkspace'), concat('Microsoft.OperationalInsights/workspaces/', parameters('workspaceName')), concat('Microsoft.Insights/actionGroups/', parameters('actionGroupName')))]"
                 ]
                 combined_resources.append(alert_res)
         
@@ -1215,7 +1220,7 @@ class ARMTemplateGenerator:
         for res in dcr_template.get("resources", []):
             dcr_res = res.copy()
             dcr_res["dependsOn"] = [
-                "[if(parameters('createNewWorkspace'), resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspaceName')), '')]"
+                "[if(parameters('createNewWorkspace'), concat('Microsoft.OperationalInsights/workspaces/', parameters('workspaceName')), concat('Microsoft.Insights/actionGroups/', parameters('actionGroupName')))]"
             ]
             # Update workspaceResourceId reference
             if "properties" in dcr_res and "destinations" in dcr_res.get("properties", {}):
@@ -1234,7 +1239,7 @@ class ARMTemplateGenerator:
                 workbook_res["properties"]["displayName"] = "[parameters('workbookDisplayName')]"
                 workbook_res["properties"]["sourceId"] = "[variables('actualWorkspaceResourceId')]"
                 workbook_res["dependsOn"] = [
-                    "[if(parameters('createNewWorkspace'), resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspaceName')), '')]"
+                    "[if(parameters('createNewWorkspace'), concat('Microsoft.OperationalInsights/workspaces/', parameters('workspaceName')), concat('Microsoft.Insights/actionGroups/', parameters('actionGroupName')))]"
                 ]
                 combined_resources.append(workbook_res)
         
@@ -1242,7 +1247,7 @@ class ARMTemplateGenerator:
         for res in custom_log_dcr.get("resources", []):
             custom_res = res.copy()
             custom_res["dependsOn"] = [
-                "[if(parameters('createNewWorkspace'), resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspaceName')), '')]"
+                "[if(parameters('createNewWorkspace'), concat('Microsoft.OperationalInsights/workspaces/', parameters('workspaceName')), concat('Microsoft.Insights/actionGroups/', parameters('actionGroupName')))]"
             ]
             # Update workspaceResourceId reference
             if "properties" in custom_res and "destinations" in custom_res.get("properties", {}):
