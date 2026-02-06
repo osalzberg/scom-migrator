@@ -933,6 +933,9 @@ class ARMTemplateGenerator:
             "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
         }
         
+        # Create a sanitized workbook name for the resource
+        workbook_resource_name = mp_name.replace(" ", "-").replace(".", "-").lower()[:60]
+        
         # Build ARM template
         template = {
             "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
@@ -942,6 +945,11 @@ class ARMTemplateGenerator:
                     "type": "string",
                     "defaultValue": workbook_name,
                     "metadata": {"description": "Display name for the workbook"}
+                },
+                "workbookResourceName": {
+                    "type": "string",
+                    "defaultValue": f"wb-{workbook_resource_name}",
+                    "metadata": {"description": "Resource name for the workbook (shown in URL). Must be unique in resource group."}
                 },
                 "workspaceName": {
                     "type": "string",
@@ -961,7 +969,7 @@ class ARMTemplateGenerator:
                 {
                     "type": "Microsoft.Insights/workbooks",
                     "apiVersion": "2022-04-01",
-                    "name": "[guid(parameters('workbookDisplayName'))]",
+                    "name": "[parameters('workbookResourceName')]",
                     "location": "[resourceGroup().location]",
                     "kind": "shared",
                     "properties": {
@@ -979,7 +987,7 @@ class ARMTemplateGenerator:
             "outputs": {
                 "workbookId": {
                     "type": "string",
-                    "value": "[resourceId('Microsoft.Insights/workbooks', guid(parameters('workbookDisplayName')))]"
+                    "value": "[resourceId('Microsoft.Insights/workbooks', parameters('workbookResourceName'))]"
                 }
             }
         }
@@ -1183,6 +1191,11 @@ class ARMTemplateGenerator:
                 "defaultValue": f"{mp_display} - Monitoring Dashboard",
                 "metadata": {"description": "Display name for the workbook"}
             },
+            "workbookResourceName": {
+                "type": "string",
+                "defaultValue": f"wb-scom-{mp_name[:40]}",
+                "metadata": {"description": "Resource name for the workbook (shown in Azure Portal URL). Must be unique in resource group."}
+            },
             "dataCollectionEndpointId": {
                 "type": "string",
                 "defaultValue": "",
@@ -1272,6 +1285,8 @@ class ARMTemplateGenerator:
             if res.get("type") == "Microsoft.Insights/workbooks":
                 workbook_res = res.copy()
                 # Always deploy - workspace is resolved from name or resourceId
+                # Use the workbookResourceName parameter for a readable name in the URL
+                workbook_res["name"] = "[parameters('workbookResourceName')]"
                 workbook_res["properties"] = res["properties"].copy()
                 workbook_res["properties"]["displayName"] = "[parameters('workbookDisplayName')]"
                 workbook_res["properties"]["sourceId"] = "[variables('actualWorkspaceResourceId')]"
@@ -1355,7 +1370,7 @@ class ARMTemplateGenerator:
                 },
                 "actionGroupId": {
                     "type": "string",
-                    "value": "[resourceId('Microsoft.Insights/actionGroups', 'scom-migration-ag')]"
+                    "value": "[resourceId('Microsoft.Insights/actionGroups', parameters('actionGroupName'))]"
                 },
                 "alertRulesDeployed": {
                     "type": "int",
@@ -1367,7 +1382,7 @@ class ARMTemplateGenerator:
                 },
                 "workbookId": {
                     "type": "string",
-                    "value": "[resourceId('Microsoft.Insights/workbooks', guid(parameters('workbookDisplayName')))]"
+                    "value": "[resourceId('Microsoft.Insights/workbooks', parameters('workbookResourceName'))]"
                 }
             }
         }
