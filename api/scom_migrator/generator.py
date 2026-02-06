@@ -744,19 +744,31 @@ class ARMTemplateGenerator:
     def generate_workbook(
         self,
         report: MigrationReport,
-        workbook_name: str = "SCOM Migration Dashboard",
+        workbook_name: str = None,
+        workbook_type: str = "Overview",
     ) -> dict[str, Any]:
         """
         Generate an Azure Workbook template for monitoring dashboard.
         
         Args:
             report: The migration report
-            workbook_name: Name for the workbook
+            workbook_name: Name for the workbook (defaults to MP name + type)
+            workbook_type: Type of workbook (Overview, Performance, Events, etc.)
             
         Returns:
             Workbook ARM template dictionary
         """
         mp_name = report.management_pack.display_name or report.management_pack.name
+        
+        # Shorten long MP names for display
+        short_name = mp_name
+        if len(mp_name) > 50:
+            # Try to get a meaningful short name
+            short_name = mp_name.split(" for ")[0] if " for " in mp_name else mp_name[:50]
+        
+        # Use MP name + type for workbook if not specified
+        if workbook_name is None:
+            workbook_name = f"{short_name} - {workbook_type} Workbook"
         
         # Build workbook items
         items = []
@@ -765,7 +777,7 @@ class ARMTemplateGenerator:
         items.append({
             "type": 1,
             "content": {
-                "json": f"# {mp_name} - Monitoring Dashboard\n\nThis workbook provides monitoring views migrated from SCOM Management Pack."
+                "json": f"# {short_name}\n## {workbook_type} Workbook\n\nMonitoring views migrated from SCOM Management Pack: *{mp_name}*"
             },
             "name": "header"
         })
