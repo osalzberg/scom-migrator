@@ -1,5 +1,8 @@
 """
-Migration Analyzer
+SCOM to Azure Monitor Migration Tool - Migration Analyzer
+
+Copyright (c) 2026 Oren Salzberg
+Licensed under the MIT License. See LICENSE file in the project root.
 
 Analyzes SCOM Management Packs and generates comprehensive migration reports
 with recommendations for Azure Monitor implementation.

@@ -1,5 +1,8 @@
 """
-Data models for SCOM Management Pack components.
+SCOM to Azure Monitor Migration Tool - Data Models
+
+Copyright (c) 2026 Oren Salzberg
+Licensed under the MIT License. See LICENSE file in the project root.
 
 These Pydantic models represent the various elements found in SCOM Management Packs
 and their Azure Monitor equivalents.

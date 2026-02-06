@@ -1,5 +1,8 @@
 """
-SCOM Management Pack XML Parser
+SCOM to Azure Monitor Migration Tool - Management Pack Parser
+
+Copyright (c) 2026 Oren Salzberg
+Licensed under the MIT License. See LICENSE file in the project root.
 
 Parses SCOM Management Pack (.xml or .mp) files and extracts all relevant
 monitoring configurations including monitors, rules, discoveries, and classes.
@@ -134,8 +137,14 @@ class ManagementPackParser:
         
         Returns:
             ManagementPack containing all parsed components
+            
+        Raises:
+            ValueError: If the file is not a valid SCOM Management Pack
         """
         self._load_xml()
+        
+        # Validate that this is actually a SCOM Management Pack
+        self._validate_management_pack()
         
         metadata = self._parse_metadata()
         classes = self._parse_classes()
@@ -143,6 +152,15 @@ class ManagementPackParser:
         monitors = self._parse_monitors()
         rules = self._parse_rules()
         discoveries = self._parse_discoveries()
+        
+        # Check if we found any components - if not, it's likely not a valid MP
+        total_components = len(monitors) + len(rules) + len(discoveries)
+        if total_components == 0 and len(classes) == 0:
+            raise ValueError(
+                "No SCOM components found in the file. This does not appear to be a valid "
+                "SCOM Management Pack. Please ensure you are uploading a .xml or .mp file "
+                "exported from System Center Operations Manager."
+            )
         
         return ManagementPack(
             metadata=metadata,
@@ -153,6 +171,38 @@ class ManagementPackParser:
             discoveries=discoveries,
         )
     
+    def _validate_management_pack(self) -> None:
+        """
+        Validate that the XML is a SCOM Management Pack.
+        
+        Raises:
+            ValueError: If the XML is not a valid SCOM Management Pack
+        """
+        if self._root is None:
+            raise ValueError("Failed to parse XML content")
+        
+        root_tag = self._root.tag.lower()
+        # Remove namespace if present
+        if "}" in root_tag:
+            root_tag = root_tag.split("}")[1]
+        
+        # Check for common SCOM MP root elements
+        valid_roots = ["managementpack", "manifest", "managementpackfragment", "templategroup"]
+        
+        if root_tag not in valid_roots:
+            # Check if any SCOM-specific elements exist
+            has_manifest = self._find(".//Manifest") is not None
+            has_monitoring = self._find(".//Monitoring") is not None
+            has_type_definitions = self._find(".//TypeDefinitions") is not None
+            
+            if not (has_manifest or has_monitoring or has_type_definitions):
+                raise ValueError(
+                    f"This file does not appear to be a SCOM Management Pack. "
+                    f"Found root element '{self._root.tag}' but expected a ManagementPack, "
+                    f"Manifest, or ManagementPackFragment element. Please upload a valid "
+                    f"SCOM Management Pack XML file."
+                )
+
     def _load_xml(self) -> None:
         """Load and parse the XML file or content safely."""
         if self._content:
@@ -291,11 +341,14 @@ class ManagementPackParser:
             if ref_id:
                 references.append(ref_id)
         
+        # Get fallback name from file path or use default
+        fallback_name = self.file_path.stem if self.file_path else "UnknownManagementPack"
+        
         return ManagementPackMetadata(
-            id=mp_id or self.file_path.stem,
-            name=mp_id or self.file_path.stem,
+            id=mp_id or fallback_name,
+            name=mp_id or fallback_name,
             version=version or "1.0.0",
-            display_name=display_name or mp_id or self.file_path.stem,
+            display_name=display_name or mp_id or fallback_name,
             description=description,
             references=references,
         )

@@ -1,5 +1,8 @@
 """
-SCOM Management Pack XML Parser
+SCOM to Azure Monitor Migration Tool - Management Pack Parser
+
+Copyright (c) 2026 Oren Salzberg
+Licensed under the MIT License. See LICENSE file in the project root.
 
 Parses SCOM Management Pack (.xml or .mp) files and extracts all relevant
 monitoring configurations including monitors, rules, discoveries, and classes.

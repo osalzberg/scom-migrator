@@ -1,5 +1,11 @@
 """
-ARM Template Generator
+SCOM to Azure Monitor Migration Tool - ARM Template Generator
+
+Copyright (c) 2026 Oren Salzberg
+Licensed under the MIT License. See LICENSE file in the project root.
+
+DISCLAIMER: This tool is provided "AS IS" without warranty of any kind.
+Generated ARM templates should be reviewed and tested before production deployment.
 
 Generates Azure Resource Manager templates for deploying Azure Monitor
 resources based on migration analysis.

@@ -1058,8 +1058,20 @@ def analyze():
         file.save(filepath)
         
         # Parse and analyze
-        parser = ManagementPackParser(filepath)
-        mp = parser.parse()
+        try:
+            parser = ManagementPackParser(filepath)
+            mp = parser.parse()
+        except Exception as parse_error:
+            # Clean up on error
+            if os.path.exists(filepath):
+                os.remove(filepath)
+            error_msg = str(parse_error)
+            if "XML" in error_msg or "xml" in error_msg or "parse" in error_msg.lower():
+                return jsonify({'error': f'Invalid Management Pack XML: The file appears to be corrupted or is not a valid SCOM Management Pack. Please ensure you are uploading a valid .xml or .mp file. Details: {error_msg}'}), 400
+            elif "encoding" in error_msg.lower() or "decode" in error_msg.lower():
+                return jsonify({'error': 'File encoding error: The file could not be read. Please ensure it is a valid UTF-8 or UTF-16 encoded XML file.'}), 400
+            else:
+                return jsonify({'error': f'Failed to parse Management Pack: {error_msg}'}), 400
         
         analyzer = MigrationAnalyzer()
         report = analyzer.analyze(mp)
@@ -1089,7 +1101,7 @@ def analyze():
         return jsonify(result)
         
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': f'An unexpected error occurred while analyzing the Management Pack. Please try again or contact support if the issue persists. Details: {str(e)}'}), 500
 
 @app.route('/api/download/<artifact_type>')
 def download(artifact_type):
