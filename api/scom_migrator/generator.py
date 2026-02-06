@@ -1144,6 +1144,12 @@ class ARMTemplateGenerator:
                 "allowedValues": ["Production", "Staging", "Development", "Test"],
                 "metadata": {"description": "Environment tag for resources"}
             },
+            "logTier": {
+                "type": "string",
+                "defaultValue": "Basic",
+                "allowedValues": ["Analytics", "Basic"],
+                "metadata": {"description": "Log tier: Analytics ($3/GB, real-time alerts) or Basic ($0.50/GB, 83% cheaper)"}
+            },
             "workbookDisplayName": {
                 "type": "string",
                 "defaultValue": f"{mp_display} - Monitoring Dashboard",
