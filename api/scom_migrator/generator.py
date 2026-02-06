@@ -238,10 +238,10 @@ class ARMTemplateGenerator:
             },
             "logTier": {
                 "type": "string",
-                "defaultValue": "Basic",
+                "defaultValue": "Analytics",
                 "allowedValues": ["Analytics", "Basic"],
                 "metadata": {
-                    "description": "Log tier for data collection: Analytics ($3/GB, real-time alerts), Basic ($0.50/GB, 83% cheaper, delayed alerts). Note: Auxiliary tier ($0.05/GB) cannot be used for alerting."
+                    "description": "Log tier for data collection: Analytics ($3/GB, required for real-time alerts - RECOMMENDED for SCOM migration), Basic ($0.50/GB, no real-time alerting)"
                 }
             },
             "targetVmResourceIds": {
@@ -1146,9 +1146,9 @@ class ARMTemplateGenerator:
             },
             "logTier": {
                 "type": "string",
-                "defaultValue": "Basic",
+                "defaultValue": "Analytics",
                 "allowedValues": ["Analytics", "Basic"],
-                "metadata": {"description": "Log tier: Analytics ($3/GB, real-time alerts) or Basic ($0.50/GB, 83% cheaper)"}
+                "metadata": {"description": "Log tier: Analytics ($3/GB, required for alerts - RECOMMENDED) or Basic ($0.50/GB, no alerting)"}
             },
             "workbookDisplayName": {
                 "type": "string",
