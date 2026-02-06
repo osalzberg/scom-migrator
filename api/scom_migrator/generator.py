@@ -1059,6 +1059,7 @@ class ARMTemplateGenerator:
         Generate a single combined ARM template with all resources.
         
         Combines alert rules, DCRs, workbook, and custom log DCR into one template.
+        Optionally creates a new Log Analytics workspace.
         
         Args:
             report: The migration report
@@ -1078,13 +1079,33 @@ class ARMTemplateGenerator:
         
         # Combine parameters (deduplicate)
         combined_params = {
+            "createNewWorkspace": {
+                "type": "bool",
+                "defaultValue": False,
+                "metadata": {"description": "Set to true to create a new Log Analytics workspace, false to use existing"}
+            },
             "workspaceName": {
                 "type": "string",
-                "metadata": {"description": "Name of the Log Analytics workspace"}
+                "defaultValue": f"law-scom-migration-{mp_name[:20]}",
+                "metadata": {"description": "Name of the Log Analytics workspace (new or existing)"}
             },
             "workspaceResourceId": {
                 "type": "string",
-                "metadata": {"description": "Full resource ID of the Log Analytics workspace"}
+                "defaultValue": "",
+                "metadata": {"description": "Full resource ID of existing workspace (leave empty if creating new)"}
+            },
+            "workspaceSku": {
+                "type": "string",
+                "defaultValue": "PerGB2018",
+                "allowedValues": ["PerGB2018", "Free", "Standalone", "PerNode", "Standard", "Premium"],
+                "metadata": {"description": "SKU for new workspace (only used if createNewWorkspace is true)"}
+            },
+            "workspaceRetentionDays": {
+                "type": "int",
+                "defaultValue": 30,
+                "minValue": 7,
+                "maxValue": 730,
+                "metadata": {"description": "Data retention in days for new workspace"}
             },
             "actionGroupEmail": {
                 "type": "string",
@@ -1108,14 +1129,37 @@ class ARMTemplateGenerator:
             }
         }
         
-        # Combine variables
+        # Combine variables - use conditional for workspace resource ID
         combined_vars = {
-            "workspaceId": "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspaceName'))]",
+            "actualWorkspaceResourceId": "[if(parameters('createNewWorkspace'), resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspaceName')), parameters('workspaceResourceId'))]",
             "customTableName": f"Custom_{mp_name}_CL"
         }
         
         # Combine all resources
         combined_resources = []
+        
+        # Add Log Analytics workspace (conditional)
+        workspace_resource = {
+            "condition": "[parameters('createNewWorkspace')]",
+            "type": "Microsoft.OperationalInsights/workspaces",
+            "apiVersion": "2022-10-01",
+            "name": "[parameters('workspaceName')]",
+            "location": "[resourceGroup().location]",
+            "properties": {
+                "sku": {
+                    "name": "[parameters('workspaceSku')]"
+                },
+                "retentionInDays": "[parameters('workspaceRetentionDays')]",
+                "features": {
+                    "enableLogAccessUsingOnlyResourcePermissions": True
+                }
+            },
+            "tags": {
+                "source": "SCOM Migration",
+                "migratedFrom": mp_display
+            }
+        }
+        combined_resources.append(workspace_resource)
         
         # Add action group from ARM template
         for res in arm_template.get("resources", []):
@@ -1123,27 +1167,57 @@ class ARMTemplateGenerator:
                 combined_resources.append(res)
                 break
         
-        # Add alert rules from ARM template
+        # Add alert rules from ARM template (with dependency on workspace if creating new)
         for res in arm_template.get("resources", []):
             if res.get("type") == "Microsoft.Insights/scheduledQueryRules":
-                combined_resources.append(res)
+                alert_res = res.copy()
+                # Add conditional dependency on workspace
+                alert_res["dependsOn"] = alert_res.get("dependsOn", []) + [
+                    "[if(parameters('createNewWorkspace'), resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspaceName')), '')]"
+                ]
+                combined_resources.append(alert_res)
         
-        # Add DCRs
+        # Add DCRs (with dependency on workspace if creating new)
         for res in dcr_template.get("resources", []):
-            combined_resources.append(res)
+            dcr_res = res.copy()
+            dcr_res["dependsOn"] = [
+                "[if(parameters('createNewWorkspace'), resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspaceName')), '')]"
+            ]
+            # Update workspaceResourceId reference
+            if "properties" in dcr_res and "destinations" in dcr_res.get("properties", {}):
+                props = dcr_res["properties"].copy()
+                if "logAnalytics" in props.get("destinations", {}):
+                    for la in props["destinations"]["logAnalytics"]:
+                        la["workspaceResourceId"] = "[variables('actualWorkspaceResourceId')]"
+                dcr_res["properties"] = props
+            combined_resources.append(dcr_res)
         
-        # Add workbook (modify to use parameter)
+        # Add workbook (modify to use variable)
         for res in workbook_template.get("resources", []):
             if res.get("type") == "Microsoft.Insights/workbooks":
                 workbook_res = res.copy()
                 workbook_res["properties"] = res["properties"].copy()
                 workbook_res["properties"]["displayName"] = "[parameters('workbookDisplayName')]"
-                workbook_res["properties"]["sourceId"] = "[parameters('workspaceResourceId')]"
+                workbook_res["properties"]["sourceId"] = "[variables('actualWorkspaceResourceId')]"
+                workbook_res["dependsOn"] = [
+                    "[if(parameters('createNewWorkspace'), resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspaceName')), '')]"
+                ]
                 combined_resources.append(workbook_res)
         
-        # Add custom log DCR
+        # Add custom log DCR (with dependency)
         for res in custom_log_dcr.get("resources", []):
-            combined_resources.append(res)
+            custom_res = res.copy()
+            custom_res["dependsOn"] = [
+                "[if(parameters('createNewWorkspace'), resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspaceName')), '')]"
+            ]
+            # Update workspaceResourceId reference
+            if "properties" in custom_res and "destinations" in custom_res.get("properties", {}):
+                props = custom_res["properties"].copy()
+                if "logAnalytics" in props.get("destinations", {}):
+                    for la in props["destinations"]["logAnalytics"]:
+                        la["workspaceResourceId"] = "[variables('actualWorkspaceResourceId')]"
+                custom_res["properties"] = props
+            combined_resources.append(custom_res)
         
         # Build combined template
         combined_template = {
@@ -1158,6 +1232,10 @@ class ARMTemplateGenerator:
             "variables": combined_vars,
             "resources": combined_resources,
             "outputs": {
+                "workspaceResourceId": {
+                    "type": "string",
+                    "value": "[variables('actualWorkspaceResourceId')]"
+                },
                 "actionGroupId": {
                     "type": "string",
                     "value": "[resourceId('Microsoft.Insights/actionGroups', 'scom-migration-ag')]"
