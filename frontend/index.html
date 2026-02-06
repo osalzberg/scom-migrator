@@ -381,9 +381,44 @@
                 font-size: 3rem;
             }
         }
+        
+        /* Floating Download Button */
+        .floating-download-btn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1050;
+            display: none;
+            animation: slideInRight 0.4s ease-out;
+            box-shadow: 0 4px 20px rgba(0, 120, 212, 0.4);
+            border-radius: 50px;
+            padding: 12px 24px;
+            font-weight: 600;
+        }
+        
+        .floating-download-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 25px rgba(0, 120, 212, 0.5);
+        }
+        
+        @keyframes slideInRight {
+            from {
+                opacity: 0;
+                transform: translateX(50px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
     </style>
 </head>
 <body>
+    <!-- Floating Download Button (shown after analysis) -->
+    <button class="btn btn-success floating-download-btn" id="floatingDownloadBtn" onclick="scrollToDownload()">
+        <i class="bi bi-download me-2"></i>Jump to Download
+    </button>
+    
     <div class="container main-container">
         <div class="row justify-content-center">
             <div class="col-lg-10">
@@ -570,7 +605,7 @@
                             </div>
                             
                             <!-- Download Section -->
-                            <div class="card">
+                            <div class="card" id="downloadSection">
                                 <div class="card-header bg-light">
                                     <h6 class="mb-0"><i class="bi bi-download me-2"></i>Download & Deploy to Azure</h6>
                                 </div>
@@ -965,6 +1000,9 @@ New-AzResourceGroupDeployment `
         function displayResults(data) {
             document.getElementById('resultSection').style.display = 'block';
             
+            // Show floating download button
+            document.getElementById('floatingDownloadBtn').style.display = 'block';
+            
             // MP Info
             document.getElementById('mpName').textContent = data.management_pack.display_name || data.management_pack.name;
             document.getElementById('mpVersion').textContent = 'Version: ' + data.management_pack.version;
@@ -1312,8 +1350,22 @@ New-AzResourceGroupDeployment `
         function resetForm() {
             document.getElementById('resultSection').style.display = 'none';
             document.getElementById('uploadSection').style.display = 'block';
+            document.getElementById('floatingDownloadBtn').style.display = 'none';
             clearFile();
             analysisResult = null;
+        }
+        
+        function scrollToDownload() {
+            const downloadSection = document.getElementById('downloadSection');
+            if (downloadSection) {
+                downloadSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                // Flash effect to highlight the section
+                downloadSection.style.transition = 'box-shadow 0.3s ease';
+                downloadSection.style.boxShadow = '0 0 20px rgba(40, 167, 69, 0.6)';
+                setTimeout(() => {
+                    downloadSection.style.boxShadow = '';
+                }, 1500);
+            }
         }
         
         
