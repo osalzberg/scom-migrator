@@ -1105,17 +1105,17 @@ class ARMTemplateGenerator:
             "createNewWorkspace": {
                 "type": "bool",
                 "defaultValue": False,
-                "metadata": {"description": "Set to true to create a new Log Analytics workspace, false to use existing"}
+                "metadata": {"description": "Set to true to create a NEW Log Analytics workspace. Set to false to use an EXISTING workspace (specify name in workspaceName parameter)."}
             },
             "workspaceName": {
                 "type": "string",
                 "defaultValue": f"law-scom-migration-{mp_name[:20]}",
-                "metadata": {"description": "Name of the Log Analytics workspace (new or existing)"}
+                "metadata": {"description": "Name of the Log Analytics workspace. If createNewWorkspace=false, this should be the name of an EXISTING workspace in the SAME resource group. If the workspace is in a different resource group, use workspaceResourceId instead."}
             },
             "workspaceResourceId": {
                 "type": "string",
                 "defaultValue": "",
-                "metadata": {"description": "Full resource ID of existing workspace (leave empty if creating new)"}
+                "metadata": {"description": "(Optional) Full resource ID of existing workspace in a DIFFERENT resource group. Leave empty to use workspaceName in current resource group."}
             },
             "workspaceSku": {
                 "type": "string",
@@ -1170,9 +1170,11 @@ class ARMTemplateGenerator:
         }
         
         # Combine variables - use conditional for workspace resource ID
+        # Logic: if createNewWorkspace=true OR workspaceResourceId is empty, use workspaceName in current RG
+        #        otherwise use the provided workspaceResourceId (for workspace in different RG)
         combined_vars = {
-            "actualWorkspaceResourceId": "[if(parameters('createNewWorkspace'), resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspaceName')), parameters('workspaceResourceId'))]",
-            "workspaceId": "[if(parameters('createNewWorkspace'), resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspaceName')), parameters('workspaceResourceId'))]",
+            "actualWorkspaceResourceId": "[if(not(empty(parameters('workspaceResourceId'))), parameters('workspaceResourceId'), resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspaceName')))]",
+            "workspaceId": "[if(not(empty(parameters('workspaceResourceId'))), parameters('workspaceResourceId'), resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspaceName')))]",
             "actionGroupId": "[resourceId('Microsoft.Insights/actionGroups', parameters('actionGroupName'))]",
             "customTableName": f"Custom_{mp_name.replace('-', '_')}_CL",
             "customStreamName": f"Custom-{mp_name.replace('-', '_')}_CL"
@@ -1214,8 +1216,8 @@ class ARMTemplateGenerator:
         for res in arm_template.get("resources", []):
             if res.get("type") == "Microsoft.Insights/scheduledQueryRules":
                 alert_res = res.copy()
-                # Add condition to ensure we have a workspace to target
-                alert_res["condition"] = "[or(parameters('createNewWorkspace'), not(empty(parameters('workspaceResourceId'))))]"
+                # Always deploy - workspace is resolved from name or resourceId
+                # (user must ensure workspace exists if createNewWorkspace=false)
                 # Use condition to only depend when creating new
                 alert_res["dependsOn"] = [
                     "[if(parameters('createNewWorkspace'), concat('Microsoft.OperationalInsights/workspaces/', parameters('workspaceName')), concat('Microsoft.Insights/actionGroups/', parameters('actionGroupName')))]"
@@ -1226,8 +1228,7 @@ class ARMTemplateGenerator:
         # Note: Standard DCRs (perf counters, event logs) don't require a DCE
         for res in dcr_template.get("resources", []):
             dcr_res = res.copy()
-            # Add condition to ensure we have a workspace to target
-            dcr_res["condition"] = "[or(parameters('createNewWorkspace'), not(empty(parameters('workspaceResourceId'))))]"
+            # Always deploy - workspace is resolved from name or resourceId
             dcr_res["dependsOn"] = [
                 "[if(parameters('createNewWorkspace'), concat('Microsoft.OperationalInsights/workspaces/', parameters('workspaceName')), concat('Microsoft.Insights/actionGroups/', parameters('actionGroupName')))]"
             ]
@@ -1244,8 +1245,7 @@ class ARMTemplateGenerator:
         for res in workbook_template.get("resources", []):
             if res.get("type") == "Microsoft.Insights/workbooks":
                 workbook_res = res.copy()
-                # Add condition to ensure we have a workspace to target
-                workbook_res["condition"] = "[or(parameters('createNewWorkspace'), not(empty(parameters('workspaceResourceId'))))]"
+                # Always deploy - workspace is resolved from name or resourceId
                 workbook_res["properties"] = res["properties"].copy()
                 workbook_res["properties"]["displayName"] = "[parameters('workbookDisplayName')]"
                 workbook_res["properties"]["sourceId"] = "[variables('actualWorkspaceResourceId')]"
