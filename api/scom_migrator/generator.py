@@ -933,10 +933,8 @@ class ARMTemplateGenerator:
             "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
         }
         
-        # Create a sanitized workbook name for the resource
-        workbook_resource_name = mp_name.replace(" ", "-").replace(".", "-").lower()[:60]
-        
         # Build ARM template
+        # Note: Workbook resource names MUST be GUIDs in Azure
         template = {
             "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
             "contentVersion": "1.0.0.0",
@@ -944,12 +942,7 @@ class ARMTemplateGenerator:
                 "workbookDisplayName": {
                     "type": "string",
                     "defaultValue": workbook_name,
-                    "metadata": {"description": "Display name for the workbook"}
-                },
-                "workbookResourceName": {
-                    "type": "string",
-                    "defaultValue": f"wb-{workbook_resource_name}",
-                    "metadata": {"description": "Resource name for the workbook (shown in URL). Must be unique in resource group."}
+                    "metadata": {"description": "Display name for the workbook (shown in Azure Portal)"}
                 },
                 "workspaceName": {
                     "type": "string",
@@ -963,13 +956,14 @@ class ARMTemplateGenerator:
                 }
             },
             "variables": {
-                "actualWorkspaceResourceId": "[if(empty(parameters('workspaceResourceId')), resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspaceName')), parameters('workspaceResourceId'))]"
+                "actualWorkspaceResourceId": "[if(empty(parameters('workspaceResourceId')), resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspaceName')), parameters('workspaceResourceId'))]",
+                "workbookResourceName": "[guid(resourceGroup().id, parameters('workbookDisplayName'))]"
             },
             "resources": [
                 {
                     "type": "Microsoft.Insights/workbooks",
                     "apiVersion": "2022-04-01",
-                    "name": "[parameters('workbookResourceName')]",
+                    "name": "[variables('workbookResourceName')]",
                     "location": "[resourceGroup().location]",
                     "kind": "shared",
                     "properties": {
@@ -980,14 +974,19 @@ class ARMTemplateGenerator:
                     },
                     "tags": {
                         "source": "SCOM Migration",
-                        "migratedFrom": mp_name
+                        "migratedFrom": mp_name,
+                        "displayName": workbook_name[:256]
                     }
                 }
             ],
             "outputs": {
                 "workbookId": {
                     "type": "string",
-                    "value": "[resourceId('Microsoft.Insights/workbooks', parameters('workbookResourceName'))]"
+                    "value": "[resourceId('Microsoft.Insights/workbooks', variables('workbookResourceName'))]"
+                },
+                "workbookDisplayName": {
+                    "type": "string",
+                    "value": "[parameters('workbookDisplayName')]"
                 }
             }
         }
@@ -1189,12 +1188,7 @@ class ARMTemplateGenerator:
             "workbookDisplayName": {
                 "type": "string",
                 "defaultValue": f"{mp_display} - Monitoring Dashboard",
-                "metadata": {"description": "Display name for the workbook"}
-            },
-            "workbookResourceName": {
-                "type": "string",
-                "defaultValue": f"wb-scom-{mp_name[:40]}",
-                "metadata": {"description": "Resource name for the workbook (shown in Azure Portal URL). Must be unique in resource group."}
+                "metadata": {"description": "Display name for the workbook (shown in Azure Portal)"}
             },
             "dataCollectionEndpointId": {
                 "type": "string",
@@ -1216,7 +1210,8 @@ class ARMTemplateGenerator:
             "workspaceId": "[if(not(empty(parameters('workspaceResourceId'))), parameters('workspaceResourceId'), resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspaceName')))]",
             "actionGroupId": "[resourceId('Microsoft.Insights/actionGroups', parameters('actionGroupName'))]",
             "customTableName": f"Custom_{mp_name.replace('-', '_')}_CL",
-            "customStreamName": f"Custom-{mp_name.replace('-', '_')}_CL"
+            "customStreamName": f"Custom-{mp_name.replace('-', '_')}_CL",
+            "workbookResourceName": "[guid(resourceGroup().id, parameters('workbookDisplayName'))]"
         }
         
         # Combine all resources
@@ -1280,19 +1275,25 @@ class ARMTemplateGenerator:
                 dcr_res["properties"] = props
             combined_resources.append(dcr_res)
         
-        # Add workbook (modify to use variable)
+        # Add workbook (modify to use variable for GUID name)
         for res in workbook_template.get("resources", []):
             if res.get("type") == "Microsoft.Insights/workbooks":
                 workbook_res = res.copy()
                 # Always deploy - workspace is resolved from name or resourceId
-                # Use the workbookResourceName parameter for a readable name in the URL
-                workbook_res["name"] = "[parameters('workbookResourceName')]"
+                # Workbook resource names MUST be GUIDs in Azure - use variable
+                workbook_res["name"] = "[variables('workbookResourceName')]"
                 workbook_res["properties"] = res["properties"].copy()
                 workbook_res["properties"]["displayName"] = "[parameters('workbookDisplayName')]"
                 workbook_res["properties"]["sourceId"] = "[variables('actualWorkspaceResourceId')]"
                 workbook_res["dependsOn"] = [
                     "[if(parameters('createNewWorkspace'), concat('Microsoft.OperationalInsights/workspaces/', parameters('workspaceName')), concat('Microsoft.Insights/actionGroups/', parameters('actionGroupName')))]"
                 ]
+                # Add tags with readable name for reference
+                workbook_res["tags"] = {
+                    "source": "SCOM Migration",
+                    "migratedFrom": mp_name,
+                    "displayName": "[parameters('workbookDisplayName')]"
+                }
                 combined_resources.append(workbook_res)
         
         # Add custom log DCR (with dependency and condition for DCE)
@@ -1382,7 +1383,11 @@ class ARMTemplateGenerator:
                 },
                 "workbookId": {
                     "type": "string",
-                    "value": "[resourceId('Microsoft.Insights/workbooks', parameters('workbookResourceName'))]"
+                    "value": "[resourceId('Microsoft.Insights/workbooks', variables('workbookResourceName'))]"
+                },
+                "workbookDisplayName": {
+                    "type": "string",
+                    "value": "[parameters('workbookDisplayName')]"
                 }
             }
         }
