@@ -905,10 +905,19 @@ class ARMTemplateGenerator:
                     "defaultValue": workbook_name,
                     "metadata": {"description": "Display name for the workbook"}
                 },
+                "workspaceName": {
+                    "type": "string",
+                    "defaultValue": "",
+                    "metadata": {"description": "Name of existing Log Analytics workspace (if in same resource group). Leave empty if using workspaceResourceId."}
+                },
                 "workspaceResourceId": {
                     "type": "string",
-                    "metadata": {"description": "Resource ID of the Log Analytics workspace"}
+                    "defaultValue": "",
+                    "metadata": {"description": "Full Resource ID of workspace. Leave empty if workspace is in same resource group and you provided workspaceName. Format: /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.OperationalInsights/workspaces/{name}"}
                 }
+            },
+            "variables": {
+                "actualWorkspaceResourceId": "[if(empty(parameters('workspaceResourceId')), resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspaceName')), parameters('workspaceResourceId'))]"
             },
             "resources": [
                 {
@@ -920,7 +929,7 @@ class ARMTemplateGenerator:
                     "properties": {
                         "displayName": "[parameters('workbookDisplayName')]",
                         "serializedData": json.dumps(workbook_content),
-                        "sourceId": "[parameters('workspaceResourceId')]",
+                        "sourceId": "[variables('actualWorkspaceResourceId')]",
                         "category": "workbook"
                     },
                     "tags": {
