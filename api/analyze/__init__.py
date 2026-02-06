@@ -79,6 +79,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
         dcr_template = generator.generate_data_collection_rules(report)
         workbook_template = generator.generate_workbook(report)
         custom_log_dcr = generator.generate_custom_log_dcr(report)
+        complete_template = generator.generate_complete_deployment(report)
         
         # Get stats
         stats = analyzer.get_summary_stats(report)
@@ -90,6 +91,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
         result['_dcr_template'] = dcr_template
         result['_workbook_template'] = workbook_template
         result['_custom_log_dcr'] = custom_log_dcr
+        result['_complete_template'] = complete_template
         
         return func.HttpResponse(
             json.dumps(result, default=str),

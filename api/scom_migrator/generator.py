@@ -1050,3 +1050,132 @@ class ARMTemplateGenerator:
         
         return template
 
+    def generate_complete_deployment(
+        self,
+        report: MigrationReport,
+        location: str = "[resourceGroup().location]",
+    ) -> dict[str, Any]:
+        """
+        Generate a single combined ARM template with all resources.
+        
+        Combines alert rules, DCRs, workbook, and custom log DCR into one template.
+        
+        Args:
+            report: The migration report
+            location: Azure region
+            
+        Returns:
+            Combined ARM template dictionary
+        """
+        mp_name = report.management_pack.name.replace(".", "-").lower()
+        mp_display = report.management_pack.display_name or report.management_pack.name
+        
+        # Get individual templates
+        arm_template = self.generate_from_report(report)
+        dcr_template = self.generate_data_collection_rules(report)
+        workbook_template = self.generate_workbook(report)
+        custom_log_dcr = self.generate_custom_log_dcr(report)
+        
+        # Combine parameters (deduplicate)
+        combined_params = {
+            "workspaceName": {
+                "type": "string",
+                "metadata": {"description": "Name of the Log Analytics workspace"}
+            },
+            "workspaceResourceId": {
+                "type": "string",
+                "metadata": {"description": "Full resource ID of the Log Analytics workspace"}
+            },
+            "actionGroupEmail": {
+                "type": "string",
+                "defaultValue": "alerts@company.com",
+                "metadata": {"description": "Email address for alert notifications"}
+            },
+            "workbookDisplayName": {
+                "type": "string",
+                "defaultValue": f"{mp_display} - Monitoring Dashboard",
+                "metadata": {"description": "Display name for the workbook"}
+            },
+            "dataCollectionEndpointId": {
+                "type": "string",
+                "defaultValue": "",
+                "metadata": {"description": "Resource ID of Data Collection Endpoint (optional, for custom logs)"}
+            },
+            "customLogPath": {
+                "type": "string",
+                "defaultValue": "C:\\\\Logs\\\\SCOMScripts\\\\*.log",
+                "metadata": {"description": "Path pattern for custom log files from migrated scripts"}
+            }
+        }
+        
+        # Combine variables
+        combined_vars = {
+            "workspaceId": "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspaceName'))]",
+            "customTableName": f"Custom_{mp_name}_CL"
+        }
+        
+        # Combine all resources
+        combined_resources = []
+        
+        # Add action group from ARM template
+        for res in arm_template.get("resources", []):
+            if res.get("type") == "Microsoft.Insights/actionGroups":
+                combined_resources.append(res)
+                break
+        
+        # Add alert rules from ARM template
+        for res in arm_template.get("resources", []):
+            if res.get("type") == "Microsoft.Insights/scheduledQueryRules":
+                combined_resources.append(res)
+        
+        # Add DCRs
+        for res in dcr_template.get("resources", []):
+            combined_resources.append(res)
+        
+        # Add workbook (modify to use parameter)
+        for res in workbook_template.get("resources", []):
+            if res.get("type") == "Microsoft.Insights/workbooks":
+                workbook_res = res.copy()
+                workbook_res["properties"] = res["properties"].copy()
+                workbook_res["properties"]["displayName"] = "[parameters('workbookDisplayName')]"
+                workbook_res["properties"]["sourceId"] = "[parameters('workspaceResourceId')]"
+                combined_resources.append(workbook_res)
+        
+        # Add custom log DCR
+        for res in custom_log_dcr.get("resources", []):
+            combined_resources.append(res)
+        
+        # Build combined template
+        combined_template = {
+            "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+            "contentVersion": "1.0.0.0",
+            "metadata": {
+                "description": f"Complete SCOM to Azure Monitor migration deployment for {mp_display}",
+                "author": "SCOM Migration Tool",
+                "generatedAt": datetime.utcnow().isoformat()
+            },
+            "parameters": combined_params,
+            "variables": combined_vars,
+            "resources": combined_resources,
+            "outputs": {
+                "actionGroupId": {
+                    "type": "string",
+                    "value": "[resourceId('Microsoft.Insights/actionGroups', 'scom-migration-ag')]"
+                },
+                "alertRulesDeployed": {
+                    "type": "int",
+                    "value": len([r for r in combined_resources if r.get("type") == "Microsoft.Insights/scheduledQueryRules"])
+                },
+                "dcrDeployed": {
+                    "type": "int",
+                    "value": len([r for r in combined_resources if r.get("type") == "Microsoft.Insights/dataCollectionRules"])
+                },
+                "workbookId": {
+                    "type": "string",
+                    "value": "[resourceId('Microsoft.Insights/workbooks', guid(parameters('workbookDisplayName')))]"
+                }
+            }
+        }
+        
+        return combined_template
+

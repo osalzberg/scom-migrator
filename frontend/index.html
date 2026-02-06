@@ -587,6 +587,19 @@
                                             </div>
                                         </div>
                                     </div>
+                                    <!-- All-in-One Download -->
+                                    <div class="mb-4">
+                                        <button class="btn btn-success btn-lg w-100 d-flex align-items-center justify-content-center py-3" onclick="downloadArtifact('complete')">
+                                            <i class="bi bi-download me-2" style="font-size: 1.5rem;"></i>
+                                            <div class="text-start">
+                                                <span class="fw-bold">Download All-in-One Template</span>
+                                                <span class="d-block" style="font-size: 0.75rem; opacity: 0.9;">Single deployment with alerts, DCRs, workbook &amp; custom logs</span>
+                                            </div>
+                                        </button>
+                                    </div>
+                                    
+                                    <!-- Individual Downloads -->
+                                    <p class="text-muted small mb-2"><i class="bi bi-grid me-1"></i>Or download individual templates:</p>
                                     <div class="row g-3 align-items-stretch">
                                         <div class="col-md-4 col-lg-2">
                                             <div class="d-grid h-100">
@@ -1343,7 +1356,10 @@ New-AzResourceGroupDeployment `
             
             let content, filename, mimeType = 'application/json';
             
-            if (type === 'arm') {
+            if (type === 'complete') {
+                content = JSON.stringify(analysisResult._complete_template || {}, null, 2);
+                filename = 'complete-deployment.json';
+            } else if (type === 'arm') {
                 content = JSON.stringify(analysisResult._arm_template || {}, null, 2);
                 filename = 'azuredeploy.json';
             } else if (type === 'dcr') {
@@ -1362,6 +1378,7 @@ New-AzResourceGroupDeployment `
                 delete report._dcr_template;
                 delete report._workbook_template;
                 delete report._custom_log_dcr;
+                delete report._complete_template;
                 content = JSON.stringify(report, null, 2);
                 filename = 'migration-report.json';
             } else if (type === 'csv') {
