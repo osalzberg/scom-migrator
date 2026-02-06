@@ -385,8 +385,20 @@ class ARMTemplateGenerator:
         # Use ARM snippet if provided, otherwise create default
         properties = rec.arm_template_snippet.get("properties", {}) if rec.arm_template_snippet else {}
         
+        # Build a meaningful description
+        description_parts = [f"Migrated from SCOM: {mapping.source_name}"]
+        if mapping.source_description:
+            description_parts.append(f"\n\nOriginal Description: {mapping.source_description}")
+        if rec.description:
+            description_parts.append(f"\n\nRecommendation: {rec.description}")
+        description = "".join(description_parts)
+        
+        # Use display name for the readable alert name (shown in Azure Portal)
+        display_name = mapping.source_name
+        
         default_properties = {
-            "description": f"Migrated from SCOM: {mapping.source_name}",
+            "displayName": display_name,
+            "description": description,
             "severity": properties.get("severity", 2),
             "enabled": True,
             "scopes": ["[parameters('targetResourceId')]"],
@@ -412,6 +424,7 @@ class ARMTemplateGenerator:
             depends_on=["[variables('actionGroupId')]"],
             tags={
                 "source": "SCOM Migration",
+                "originalName": mapping.source_name[:256],  # Tag max length is 256
                 "originalId": mapping.source_id,
                 "environment": "[parameters('environment')]"
             }
@@ -430,8 +443,20 @@ class ARMTemplateGenerator:
         # Get KQL query from recommendation
         query = rec.kql_query or "// TODO: Add KQL query"
         
+        # Build a meaningful description
+        description_parts = [f"Migrated from SCOM: {mapping.source_name}"]
+        if mapping.source_description:
+            description_parts.append(f"\n\nOriginal Description: {mapping.source_description}")
+        if rec.description:
+            description_parts.append(f"\n\nRecommendation: {rec.description}")
+        description = "".join(description_parts)
+        
+        # Use display name for the readable alert name (shown in Azure Portal)
+        display_name = mapping.source_name
+        
         properties = {
-            "description": f"Migrated from SCOM: {mapping.source_name}",
+            "displayName": display_name,
+            "description": description,
             "severity": 2,
             "enabled": True,
             "scopes": ["[variables('workspaceId')]"],
@@ -468,6 +493,7 @@ class ARMTemplateGenerator:
             ],
             tags={
                 "source": "SCOM Migration",
+                "originalName": mapping.source_name[:256],  # Tag max length is 256
                 "originalId": mapping.source_id,
                 "environment": "[parameters('environment')]"
             }
