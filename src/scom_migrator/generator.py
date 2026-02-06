@@ -914,7 +914,7 @@ class ARMTemplateGenerator:
             "type": 3,
             "content": {
                 "version": "KqlItem/1.0",
-                "query": "AlertsManagementResources\n| where type == 'microsoft.alertsmanagement/alerts'\n| where properties.essentials.alertState == 'New'\n| project AlertName=properties.essentials.alertRule, Severity=properties.essentials.severity, StartTime=properties.essentials.startDateTime\n| order by StartTime desc",
+                "query": "AlertsManagementResources\n| where type == 'microsoft.alertsmanagement/alerts'\n| where properties.essentials.alertState == 'New'\n| project AlertName=tostring(properties.essentials.alertRule), Severity=tostring(properties.essentials.severity), StartTime=todatetime(properties.essentials.startDateTime)\n| order by StartTime desc",
                 "size": 0,
                 "title": "Active Alerts",
                 "queryType": 1,
