@@ -646,7 +646,7 @@
                                                 </button>
                                             </div>
                                         </div>
-                                        <div class="col-md-4 col-lg-2">
+                                        <div class="col-md-4 col-lg-2" id="scriptGuideButtonContainer" style="display: none;">
                                             <div class="d-grid h-100">
                                                 <button class="btn btn-outline-dark d-flex flex-column align-items-center justify-content-center py-3" onclick="showScriptGuidance()">
                                                     <i class="bi bi-code-square mb-1"></i>
@@ -968,6 +968,14 @@ New-AzResourceGroupDeployment `
             // MP Info
             document.getElementById('mpName').textContent = data.management_pack.display_name || data.management_pack.name;
             document.getElementById('mpVersion').textContent = 'Version: ' + data.management_pack.version;
+            
+            // Check if there are scripts in the MP - show/hide Script Guide button
+            const hasScripts = data.mappings && data.mappings.some(m => 
+                m.data_sources && m.data_sources.some(ds => 
+                    ds.script_body || ds.type === 'Script' || ds.type === 'PowerShell' || ds.type === 'VBScript'
+                )
+            );
+            document.getElementById('scriptGuideButtonContainer').style.display = hasScripts ? 'block' : 'none';
             
             // Stats with animation
             animateValue('totalComponents', 0, data.total_components, 1000);
@@ -1406,18 +1414,7 @@ New-AzResourceGroupDeployment `
         function showScriptGuidance() {
             if (!analysisResult) return;
             
-            // Check if there are any script-based mappings
-            const scriptMappings = analysisResult.mappings.filter(m => 
-                m.data_sources && m.data_sources.some(ds => 
-                    ds.script_body || ds.type === 'Script' || ds.type === 'PowerShell' || ds.type === 'VBScript'
-                )
-            );
-            
-            if (scriptMappings.length === 0) {
-                alert('No scripts found in this management pack. Script guidance is not needed.');
-                return;
-            }
-            
+            // Button is only visible when there are scripts, so just show the section
             document.getElementById('scriptGuidanceSection').style.display = 'block';
             document.getElementById('scriptGuidanceSection').scrollIntoView({behavior: 'smooth'});
         }
