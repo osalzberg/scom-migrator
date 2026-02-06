@@ -1126,6 +1126,12 @@ class ARMTemplateGenerator:
                 "defaultValue": "alerts@company.com",
                 "metadata": {"description": "Email address for alert notifications"}
             },
+            "environment": {
+                "type": "string",
+                "defaultValue": "Production",
+                "allowedValues": ["Production", "Staging", "Development", "Test"],
+                "metadata": {"description": "Environment tag for resources"}
+            },
             "workbookDisplayName": {
                 "type": "string",
                 "defaultValue": f"{mp_display} - Monitoring Dashboard",
