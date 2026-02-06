@@ -1107,6 +1107,11 @@ class ARMTemplateGenerator:
                 "maxValue": 730,
                 "metadata": {"description": "Data retention in days for new workspace"}
             },
+            "actionGroupName": {
+                "type": "string",
+                "defaultValue": "scom-migration-ag",
+                "metadata": {"description": "Name of the action group for alert notifications"}
+            },
             "actionGroupEmail": {
                 "type": "string",
                 "defaultValue": "alerts@company.com",
@@ -1132,6 +1137,7 @@ class ARMTemplateGenerator:
         # Combine variables - use conditional for workspace resource ID
         combined_vars = {
             "actualWorkspaceResourceId": "[if(parameters('createNewWorkspace'), resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspaceName')), parameters('workspaceResourceId'))]",
+            "actionGroupId": "[resourceId('Microsoft.Insights/actionGroups', parameters('actionGroupName'))]",
             "customTableName": f"Custom_{mp_name}_CL"
         }
         
