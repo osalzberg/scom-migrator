@@ -77,6 +77,8 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
         generator = ARMTemplateGenerator()
         arm_template = generator.generate_from_report(report)
         dcr_template = generator.generate_data_collection_rules(report)
+        workbook_template = generator.generate_workbook(report)
+        custom_log_dcr = generator.generate_custom_log_dcr(report)
         
         # Get stats
         stats = analyzer.get_summary_stats(report)
@@ -86,6 +88,8 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
         result['stats'] = stats
         result['_arm_template'] = arm_template
         result['_dcr_template'] = dcr_template
+        result['_workbook_template'] = workbook_template
+        result['_custom_log_dcr'] = custom_log_dcr
         
         return func.HttpResponse(
             json.dumps(result, default=str),

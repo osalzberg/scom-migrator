@@ -740,3 +740,313 @@ class ARMTemplateGenerator:
             f.write(bicep_content)
         
         return bicep_content
+
+    def generate_workbook(
+        self,
+        report: MigrationReport,
+        workbook_name: str = "SCOM Migration Dashboard",
+    ) -> dict[str, Any]:
+        """
+        Generate an Azure Workbook template for monitoring dashboard.
+        
+        Args:
+            report: The migration report
+            workbook_name: Name for the workbook
+            
+        Returns:
+            Workbook ARM template dictionary
+        """
+        mp_name = report.management_pack.display_name or report.management_pack.name
+        
+        # Build workbook items
+        items = []
+        
+        # Header section
+        items.append({
+            "type": 1,
+            "content": {
+                "json": f"# {mp_name} - Monitoring Dashboard\n\nThis workbook provides monitoring views migrated from SCOM Management Pack."
+            },
+            "name": "header"
+        })
+        
+        # Migration summary section
+        total = report.total_components
+        migratable = report.migratable_components
+        items.append({
+            "type": 1,
+            "content": {
+                "json": f"## Migration Summary\n- **Total Components**: {total}\n- **Migratable**: {migratable}\n- **Migration Rate**: {(migratable/total*100) if total > 0 else 0:.0f}%"
+            },
+            "name": "summary"
+        })
+        
+        # Performance counters section if applicable
+        perf_queries = []
+        event_queries = []
+        service_queries = []
+        
+        for mapping in report.mappings:
+            for rec in mapping.recommendations:
+                if rec.kql_query:
+                    query = rec.kql_query
+                    if "Perf" in query:
+                        perf_queries.append((mapping.source_name, query))
+                    elif "Event" in query:
+                        event_queries.append((mapping.source_name, query))
+        
+        # Add performance monitoring section
+        if perf_queries:
+            items.append({
+                "type": 1,
+                "content": {"json": "## Performance Monitoring"}
+            })
+            items.append({
+                "type": 3,
+                "content": {
+                    "version": "KqlItem/1.0",
+                    "query": "Perf\n| where TimeGenerated > ago(1h)\n| summarize avg(CounterValue) by CounterName, bin(TimeGenerated, 5m)\n| render timechart",
+                    "size": 0,
+                    "title": "Performance Counters Overview",
+                    "queryType": 0,
+                    "resourceType": "microsoft.operationalinsights/workspaces",
+                    "visualization": "timechart"
+                },
+                "name": "perfChart"
+            })
+        
+        # Add event monitoring section
+        if event_queries:
+            items.append({
+                "type": 1,
+                "content": {"json": "## Event Monitoring"}
+            })
+            items.append({
+                "type": 3,
+                "content": {
+                    "version": "KqlItem/1.0",
+                    "query": "Event\n| where TimeGenerated > ago(24h)\n| where EventLevelName in ('Error', 'Warning')\n| summarize count() by EventLog, EventLevelName, bin(TimeGenerated, 1h)\n| render columnchart",
+                    "size": 0,
+                    "title": "Events by Log and Severity",
+                    "queryType": 0,
+                    "resourceType": "microsoft.operationalinsights/workspaces",
+                    "visualization": "categoricalbar"
+                },
+                "name": "eventChart"
+            })
+            items.append({
+                "type": 3,
+                "content": {
+                    "version": "KqlItem/1.0",
+                    "query": "Event\n| where TimeGenerated > ago(24h)\n| where EventLevelName in ('Error', 'Warning')\n| project TimeGenerated, Computer, EventLog, EventID, EventLevelName, RenderedDescription\n| order by TimeGenerated desc\n| take 100",
+                    "size": 0,
+                    "title": "Recent Error and Warning Events",
+                    "queryType": 0,
+                    "resourceType": "microsoft.operationalinsights/workspaces",
+                    "visualization": "table"
+                },
+                "name": "eventTable"
+            })
+        
+        # Service health section
+        items.append({
+            "type": 1,
+            "content": {"json": "## Service Health"}
+        })
+        items.append({
+            "type": 3,
+            "content": {
+                "version": "KqlItem/1.0",
+                "query": "Event\n| where TimeGenerated > ago(24h)\n| where EventLog == 'System' and EventID == 7036\n| parse RenderedDescription with ServiceName \" service \" ServiceState \" \" *\n| where ServiceState has 'stopped'\n| summarize StopCount=count() by ServiceName\n| order by StopCount desc\n| take 20",
+                "size": 0,
+                "title": "Services with Stop Events (Last 24h)",
+                "queryType": 0,
+                "resourceType": "microsoft.operationalinsights/workspaces",
+                "visualization": "table"
+            },
+            "name": "serviceHealth"
+        })
+        
+        # Alerts section
+        items.append({
+            "type": 1,
+            "content": {"json": "## Active Alerts"}
+        })
+        items.append({
+            "type": 3,
+            "content": {
+                "version": "KqlItem/1.0",
+                "query": "AlertsManagementResources\n| where type == 'microsoft.alertsmanagement/alerts'\n| where properties.essentials.alertState == 'New'\n| project AlertName=properties.essentials.alertRule, Severity=properties.essentials.severity, StartTime=properties.essentials.startDateTime\n| order by StartTime desc",
+                "size": 0,
+                "title": "Active Alerts",
+                "queryType": 1,
+                "resourceType": "microsoft.resourcegraph/resources",
+                "visualization": "table"
+            },
+            "name": "activeAlerts"
+        })
+        
+        # Build workbook content
+        workbook_content = {
+            "version": "Notebook/1.0",
+            "items": items,
+            "fallbackResourceIds": ["/subscriptions/{subscription-id}/resourceGroups/{resource-group}/providers/Microsoft.OperationalInsights/workspaces/{workspace-name}"],
+            "styleSettings": {},
+            "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
+        }
+        
+        # Build ARM template
+        template = {
+            "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+            "contentVersion": "1.0.0.0",
+            "parameters": {
+                "workbookDisplayName": {
+                    "type": "string",
+                    "defaultValue": workbook_name,
+                    "metadata": {"description": "Display name for the workbook"}
+                },
+                "workspaceResourceId": {
+                    "type": "string",
+                    "metadata": {"description": "Resource ID of the Log Analytics workspace"}
+                }
+            },
+            "resources": [
+                {
+                    "type": "Microsoft.Insights/workbooks",
+                    "apiVersion": "2022-04-01",
+                    "name": "[guid(parameters('workbookDisplayName'))]",
+                    "location": "[resourceGroup().location]",
+                    "kind": "shared",
+                    "properties": {
+                        "displayName": "[parameters('workbookDisplayName')]",
+                        "serializedData": json.dumps(workbook_content),
+                        "sourceId": "[parameters('workspaceResourceId')]",
+                        "category": "workbook"
+                    },
+                    "tags": {
+                        "source": "SCOM Migration",
+                        "migratedFrom": mp_name
+                    }
+                }
+            ],
+            "outputs": {
+                "workbookId": {
+                    "type": "string",
+                    "value": "[resourceId('Microsoft.Insights/workbooks', guid(parameters('workbookDisplayName')))]"
+                }
+            }
+        }
+        
+        return template
+
+    def generate_custom_log_dcr(
+        self,
+        report: MigrationReport,
+        location: str = "[resourceGroup().location]",
+    ) -> dict[str, Any]:
+        """
+        Generate DCR for custom log collection from script outputs.
+        
+        Args:
+            report: The migration report
+            location: Azure region
+            
+        Returns:
+            ARM template for custom log DCR
+        """
+        mp_name = report.management_pack.name.replace(".", "-").lower()
+        
+        template = {
+            "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+            "contentVersion": "1.0.0.0",
+            "parameters": {
+                "workspaceResourceId": {
+                    "type": "string",
+                    "metadata": {"description": "Resource ID of the Log Analytics workspace"}
+                },
+                "dataCollectionEndpointId": {
+                    "type": "string",
+                    "defaultValue": "",
+                    "metadata": {"description": "Resource ID of Data Collection Endpoint (required for custom logs)"}
+                },
+                "customLogPath": {
+                    "type": "string",
+                    "defaultValue": "C:\\\\Logs\\\\SCOMScripts\\\\*.log",
+                    "metadata": {"description": "Path pattern for custom log files generated by migrated scripts"}
+                }
+            },
+            "variables": {
+                "customTableName": f"Custom_{mp_name}_CL"
+            },
+            "resources": [
+                {
+                    "type": "Microsoft.Insights/dataCollectionRules",
+                    "apiVersion": "2022-06-01",
+                    "name": f"dcr-customlog-{mp_name}",
+                    "location": location,
+                    "kind": "Windows",
+                    "properties": {
+                        "description": f"Custom log collection for scripts migrated from SCOM MP: {report.management_pack.display_name or report.management_pack.name}",
+                        "dataCollectionEndpointId": "[if(empty(parameters('dataCollectionEndpointId')), null(), parameters('dataCollectionEndpointId'))]",
+                        "streamDeclarations": {
+                            "Custom-TextLog": {
+                                "columns": [
+                                    {"name": "TimeGenerated", "type": "datetime"},
+                                    {"name": "RawData", "type": "string"},
+                                    {"name": "Computer", "type": "string"},
+                                    {"name": "FilePath", "type": "string"}
+                                ]
+                            }
+                        },
+                        "dataSources": {
+                            "logFiles": [
+                                {
+                                    "name": "customLogDataSource",
+                                    "streams": ["Custom-TextLog"],
+                                    "filePatterns": ["[parameters('customLogPath')]"],
+                                    "format": "text",
+                                    "settings": {
+                                        "text": {
+                                            "recordStartTimestampFormat": "ISO 8601"
+                                        }
+                                    }
+                                }
+                            ]
+                        },
+                        "destinations": {
+                            "logAnalytics": [
+                                {
+                                    "name": "logAnalyticsWorkspace",
+                                    "workspaceResourceId": "[parameters('workspaceResourceId')]"
+                                }
+                            ]
+                        },
+                        "dataFlows": [
+                            {
+                                "streams": ["Custom-TextLog"],
+                                "destinations": ["logAnalyticsWorkspace"],
+                                "transformKql": "source | extend TimeGenerated = now()",
+                                "outputStream": "[variables('customTableName')]"
+                            }
+                        ]
+                    },
+                    "tags": {
+                        "source": "SCOM Migration",
+                        "purpose": "Custom log collection for migrated scripts"
+                    }
+                }
+            ],
+            "outputs": {
+                "dcrId": {
+                    "type": "string",
+                    "value": f"[resourceId('Microsoft.Insights/dataCollectionRules', 'dcr-customlog-{mp_name}')]"
+                },
+                "customTableName": {
+                    "type": "string", 
+                    "value": "[variables('customTableName')]"
+                }
+            }
+        }
+        
+        return template
+

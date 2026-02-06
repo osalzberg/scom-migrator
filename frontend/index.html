@@ -588,7 +588,7 @@
                                         </div>
                                     </div>
                                     <div class="row g-3 align-items-stretch">
-                                        <div class="col-md-4">
+                                        <div class="col-md-4 col-lg-2">
                                             <div class="d-grid h-100">
                                                 <button class="btn btn-primary d-flex flex-column align-items-center justify-content-center py-3" onclick="downloadArtifact('arm')">
                                                     <i class="bi bi-cloud-upload mb-1"></i>
@@ -597,7 +597,7 @@
                                                 </button>
                                             </div>
                                         </div>
-                                        <div class="col-md-4">
+                                        <div class="col-md-4 col-lg-2">
                                             <div class="d-grid h-100">
                                                 <button class="btn btn-primary d-flex flex-column align-items-center justify-content-center py-3" onclick="downloadArtifact('dcr')">
                                                     <i class="bi bi-collection mb-1"></i>
@@ -606,7 +606,25 @@
                                                 </button>
                                             </div>
                                         </div>
-                                        <div class="col-md-4">
+                                        <div class="col-md-4 col-lg-2">
+                                            <div class="d-grid h-100">
+                                                <button class="btn btn-info text-white d-flex flex-column align-items-center justify-content-center py-3" onclick="downloadArtifact('workbook')">
+                                                    <i class="bi bi-bar-chart-line mb-1"></i>
+                                                    <span>Workbook</span>
+                                                    <span class="badge bg-light text-info mt-1" style="font-size: 0.6rem;">Dashboard</span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4 col-lg-2">
+                                            <div class="d-grid h-100">
+                                                <button class="btn btn-warning text-dark d-flex flex-column align-items-center justify-content-center py-3" onclick="downloadArtifact('customlog')">
+                                                    <i class="bi bi-file-text mb-1"></i>
+                                                    <span>Custom Log DCR</span>
+                                                    <span class="badge bg-dark text-warning mt-1" style="font-size: 0.6rem;">Script Output</span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4 col-lg-2">
                                             <div class="d-grid h-100">
                                                 <button class="btn btn-outline-secondary d-flex flex-column align-items-center justify-content-center py-3" onclick="downloadArtifact('csv')">
                                                     <i class="bi bi-filetype-csv mb-1"></i>
@@ -614,6 +632,31 @@
                                                     <span class="badge bg-secondary mt-1" style="font-size: 0.6rem;">Planning</span>
                                                 </button>
                                             </div>
+                                        </div>
+                                        <div class="col-md-4 col-lg-2">
+                                            <div class="d-grid h-100">
+                                                <button class="btn btn-outline-dark d-flex flex-column align-items-center justify-content-center py-3" onclick="showScriptGuidance()">
+                                                    <i class="bi bi-code-square mb-1"></i>
+                                                    <span>Script Guide</span>
+                                                    <span class="badge bg-dark mt-1" style="font-size: 0.6rem;">Migration</span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Script Migration Guidance Modal Trigger -->
+                                    <div id="scriptGuidanceSection" class="mt-4" style="display: none;">
+                                        <div class="alert alert-info">
+                                            <h6 class="mb-2"><i class="bi bi-lightbulb me-2"></i>Script Migration Guidance</h6>
+                                            <p class="mb-2 small">Your management pack contains scripts that need migration. Here are your options:</p>
+                                            <ul class="mb-0 small">
+                                                <li><strong>Azure Functions:</strong> Convert scripts to Azure Functions for serverless execution</li>
+                                                <li><strong>Azure Automation:</strong> Use Runbooks for scheduled script execution</li>
+                                                <li><strong>Custom Log DCR:</strong> Configure scripts to write to log files collected by Azure Monitor Agent</li>
+                                            </ul>
+                                            <button class="btn btn-sm btn-outline-primary mt-2" onclick="showScriptDetails()">
+                                                <i class="bi bi-code me-1"></i>View Script Details
+                                            </button>
                                         </div>
                                     </div>
                                     
@@ -663,7 +706,20 @@ az deployment group create \
 az deployment group create \
   --resource-group YOUR_RESOURCE_GROUP \
   --template-file data-collection-rules.json \
-  --parameters workspaceResourceId=/subscriptions/xxx/resourceGroups/xxx/providers/Microsoft.OperationalInsights/workspaces/xxx</code></pre>
+  --parameters workspaceResourceId=/subscriptions/xxx/resourceGroups/xxx/providers/Microsoft.OperationalInsights/workspaces/xxx
+
+# Deploy Workbook
+az deployment group create \
+  --resource-group YOUR_RESOURCE_GROUP \
+  --template-file monitoring-workbook.json \
+  --parameters workspaceResourceId=/subscriptions/xxx/...
+
+# Deploy Custom Log DCR (for script outputs)
+az deployment group create \
+  --resource-group YOUR_RESOURCE_GROUP \
+  --template-file custom-log-dcr.json \
+  --parameters workspaceResourceId=/subscriptions/xxx/... \
+               customLogPath="C:\\Logs\\*.log"</code></pre>
                                                     </div>
                                                 </div>
                                             </div>
@@ -689,7 +745,20 @@ New-AzResourceGroupDeployment `
 New-AzResourceGroupDeployment `
   -ResourceGroupName "YOUR_RESOURCE_GROUP" `
   -TemplateFile "data-collection-rules.json" `
-  -workspaceResourceId "/subscriptions/xxx/..."</code></pre>
+  -workspaceResourceId "/subscriptions/xxx/..."
+
+# Deploy Workbook
+New-AzResourceGroupDeployment `
+  -ResourceGroupName "YOUR_RESOURCE_GROUP" `
+  -TemplateFile "monitoring-workbook.json" `
+  -workspaceResourceId "/subscriptions/xxx/..."
+
+# Deploy Custom Log DCR (for script outputs)
+New-AzResourceGroupDeployment `
+  -ResourceGroupName "YOUR_RESOURCE_GROUP" `
+  -TemplateFile "custom-log-dcr.json" `
+  -workspaceResourceId "/subscriptions/xxx/..." `
+  -customLogPath "C:\Logs\*.log"</code></pre>
                                                     </div>
                                                 </div>
                                             </div>
@@ -1280,11 +1349,19 @@ New-AzResourceGroupDeployment `
             } else if (type === 'dcr') {
                 content = JSON.stringify(analysisResult._dcr_template || {}, null, 2);
                 filename = 'data-collection-rules.json';
+            } else if (type === 'workbook') {
+                content = JSON.stringify(analysisResult._workbook_template || {}, null, 2);
+                filename = 'monitoring-workbook.json';
+            } else if (type === 'customlog') {
+                content = JSON.stringify(analysisResult._custom_log_dcr || {}, null, 2);
+                filename = 'custom-log-dcr.json';
             } else if (type === 'report') {
                 // Remove internal fields before exporting
                 const report = {...analysisResult};
                 delete report._arm_template;
                 delete report._dcr_template;
+                delete report._workbook_template;
+                delete report._custom_log_dcr;
                 content = JSON.stringify(report, null, 2);
                 filename = 'migration-report.json';
             } else if (type === 'csv') {
@@ -1302,6 +1379,69 @@ New-AzResourceGroupDeployment `
             const a = document.createElement('a');
             a.href = url;
             a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+        
+        // Script migration guidance functions
+        function showScriptGuidance() {
+            if (!analysisResult) return;
+            
+            // Check if there are any script-based mappings
+            const scriptMappings = analysisResult.mappings.filter(m => 
+                m.data_sources && m.data_sources.some(ds => 
+                    ds.script_body || ds.type === 'Script' || ds.type === 'PowerShell' || ds.type === 'VBScript'
+                )
+            );
+            
+            if (scriptMappings.length === 0) {
+                alert('No scripts found in this management pack. Script guidance is not needed.');
+                return;
+            }
+            
+            document.getElementById('scriptGuidanceSection').style.display = 'block';
+            document.getElementById('scriptGuidanceSection').scrollIntoView({behavior: 'smooth'});
+        }
+        
+        function showScriptDetails() {
+            if (!analysisResult) return;
+            
+            // Build script details modal content
+            let scriptContent = '# Script Migration Details\\n\\n';
+            let scriptCount = 0;
+            
+            analysisResult.mappings.forEach(mapping => {
+                if (mapping.data_sources) {
+                    mapping.data_sources.forEach(ds => {
+                        if (ds.script_body || ds.type === 'Script' || ds.type === 'PowerShell' || ds.type === 'VBScript') {
+                            scriptCount++;
+                            scriptContent += `## ${mapping.source_name}\\n`;
+                            scriptContent += `Type: ${ds.type || 'Unknown'}\\n`;
+                            if (ds.script_name) {
+                                scriptContent += `Script Name: ${ds.script_name}\\n`;
+                            }
+                            if (ds.script_body) {
+                                scriptContent += `\\n### Script Content:\\n\`\`\`\\n${ds.script_body.substring(0, 500)}${ds.script_body.length > 500 ? '\\n... (truncated)' : ''}\\n\`\`\`\\n\\n`;
+                            }
+                            scriptContent += '---\\n\\n';
+                        }
+                    });
+                }
+            });
+            
+            if (scriptCount === 0) {
+                alert('No scripts with content found.');
+                return;
+            }
+            
+            // Download as markdown file
+            const blob = new Blob([scriptContent.replace(/\\\\n/g, '\\n')], {type: 'text/markdown'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'script-migration-details.md';
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
