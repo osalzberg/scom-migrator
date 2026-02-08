@@ -4,7 +4,7 @@ SCOM to Azure Monitor Migration Tool - Management Pack Parser
 Copyright (c) 2026 Oren Salzberg
 Licensed under the MIT License. See LICENSE file in the project root.
 
-Parses SCOM Management Pack (.xml or .mp) files and extracts all relevant
+Parses SCOM Management Pack (.xml, .mp, or .mpb) files and extracts all relevant
 monitoring configurations including monitors, rules, discoveries, and classes.
 """
 
@@ -46,7 +46,7 @@ class ManagementPackParser:
     """
     Parser for SCOM Management Pack XML files.
     
-    Supports both sealed (.mp) and unsealed (.xml) management packs.
+    Supports sealed (.mp), bundles (.mpb), and unsealed (.xml) management packs.
     """
     
     # Common SCOM XML namespaces
@@ -168,7 +168,7 @@ class ManagementPackParser:
         if total_components == 0 and len(classes) == 0:
             raise ValueError(
                 "No SCOM components found in the file. This does not appear to be a valid "
-                "SCOM Management Pack. Please ensure you are uploading a .xml or .mp file "
+                "SCOM Management Pack. Please ensure you are uploading a .xml, .mp, or .mpb file "
                 "exported from System Center Operations Manager."
             )
         
@@ -235,15 +235,15 @@ class ManagementPackParser:
             if not self.file_path.exists():
                 raise FileNotFoundError(f"Management pack not found: {self.file_path}")
             
-            # Check if it's a .mp file (sealed management pack - CAB archive)
-            if self.file_path.suffix.lower() == '.mp':
+            # Check if it's a .mp or .mpb file (sealed management pack / bundle - CAB archive)
+            if self.file_path.suffix.lower() in ['.mp', '.mpb']:
                 xml_content = self._extract_xml_from_mp_file(self.file_path)
                 if xml_content:
                     self._root = SafeET.fromstring(xml_content)
                     self._tree = ET.ElementTree(self._root)
                 else:
                     raise ValueError(
-                        "Could not extract XML from sealed management pack (.mp file). "
+                        "Could not extract XML from sealed management pack (.mp/.mpb file). "
                         "The file may be corrupted or in an unsupported format. "
                         "Try exporting the unsealed XML version from SCOM."
                     )
@@ -1006,7 +1006,7 @@ class ManagementPackParser:
         if not path.exists():
             return False
         
-        if path.suffix.lower() not in [".xml", ".mp"]:
+        if path.suffix.lower() not in [".xml", ".mp", ".mpb"]:
             return False
         
         try:
