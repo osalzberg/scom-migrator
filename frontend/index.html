@@ -444,10 +444,10 @@
                                 </label>
                                 <p class="small text-muted mt-4 mb-0">
                                     <i class="bi bi-info-circle me-1"></i>
-                                    Supports .xml, .mp, and .mpb files (max 50MB)
+                                    Supports .xml Management Pack files (max 50MB)
                                 </p>
                             </div>
-                            <input type="file" id="fileInput" accept=".xml,.mp,.mpb" onchange="handleFileSelect(event)">
+                            <input type="file" id="fileInput" accept=".xml" onchange="handleFileSelect(event)">
                             
                             <div class="mt-3" id="selectedFile" style="display: none;">
                                 <div class="alert alert-info d-flex align-items-center">
@@ -976,8 +976,8 @@ New-AzResourceGroupDeployment `
         
         function handleFile(file) {
             const ext = file.name.split('.').pop().toLowerCase();
-            if (!['xml', 'mp'].includes(ext)) {
-                alert('Please select a valid Management Pack file (.xml or .mp)');
+            if (ext !== 'xml') {
+                showFileFormatError(ext);
                 return;
             }
             
@@ -1080,6 +1080,46 @@ New-AzResourceGroupDeployment `
                 // Generic error
                 alert('Error: ' + errorMsg);
             }
+        }
+        
+        function showFileFormatError(ext) {
+            const modal = document.createElement('div');
+            modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:1000;';
+            
+            let title = '📦 Unsupported File Format';
+            let description = `You uploaded a <strong>.${ext}</strong> file.`;
+            
+            if (ext === 'mp') {
+                title = '📦 Sealed Management Pack Detected';
+                description = 'Sealed Management Packs (.mp) are compiled and cannot be analyzed directly.';
+            } else if (ext === 'mpb') {
+                title = '📦 Management Pack Bundle Detected';
+                description = 'Management Pack Bundles (.mpb) cannot be analyzed directly.';
+            }
+            
+            modal.innerHTML = `
+                <div style="background:white;border-radius:12px;padding:32px;max-width:500px;margin:20px;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
+                    <h2 style="margin:0 0 16px 0;color:#0078d4;font-size:20px;">${title}</h2>
+                    <p style="color:#333;margin:0 0 20px 0;line-height:1.6;">
+                        ${description} Please export it as XML from SCOM.
+                    </p>
+                    <div style="background:#f5f5f5;border-radius:8px;padding:16px;margin-bottom:20px;">
+                        <p style="margin:0 0 12px 0;font-weight:600;color:#333;">How to export:</p>
+                        <ol style="margin:0;padding-left:20px;color:#555;line-height:1.8;">
+                            <li>Open <strong>SCOM Console</strong></li>
+                            <li>Go to <strong>Administration → Management Packs</strong></li>
+                            <li>Right-click the MP → <strong>Export Management Pack</strong></li>
+                            <li>Save as <strong>.xml</strong> and upload here</li>
+                        </ol>
+                    </div>
+                    <button onclick="this.closest('div').parentElement.remove()" 
+                        style="background:#0078d4;color:white;border:none;padding:12px 32px;border-radius:6px;cursor:pointer;font-size:14px;font-weight:500;">
+                        Got it
+                    </button>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
         }
         
         function displayResults(data) {
