@@ -12,11 +12,18 @@ import re
 import zipfile
 import tempfile
 import os
+import io
 from pathlib import Path
 from typing import Optional, Any
 from xml.etree import ElementTree as ET
 
 from defusedxml import ElementTree as SafeET
+
+try:
+    from cabarchive import CabArchive
+    HAS_CABARCHIVE = True
+except ImportError:
+    HAS_CABARCHIVE = False
 
 from .models import (
     ManagementPack,
@@ -350,7 +357,7 @@ class ManagementPackParser:
     
     def _extract_from_cab_bytes(self, content: bytes) -> Optional[str]:
         """
-        Extract XML from CAB archive bytes using subprocess.
+        Extract XML from CAB archive bytes.
         
         Args:
             content: CAB file content as bytes
@@ -358,6 +365,27 @@ class ManagementPackParser:
         Returns:
             Extracted XML string or None
         """
+        # Try using cabarchive library first (pure Python, works everywhere)
+        if HAS_CABARCHIVE:
+            try:
+                cab = CabArchive(content)
+                for cf in cab:
+                    # Look for XML file in the archive
+                    if cf.filename.lower().endswith('.xml'):
+                        return cf.buf.decode('utf-8')
+                # If no .xml file found, try the first file
+                for cf in cab:
+                    try:
+                        content_str = cf.buf.decode('utf-8')
+                        # Check if it looks like XML
+                        if content_str.strip().startswith('<?xml') or content_str.strip().startswith('<'):
+                            return content_str
+                    except UnicodeDecodeError:
+                        continue
+            except Exception:
+                pass
+        
+        # Fallback: try using subprocess cabextract (Linux/Mac)
         try:
             import subprocess
             with tempfile.TemporaryDirectory() as tmpdir:
@@ -378,7 +406,7 @@ class ManagementPackParser:
                             xml_path = os.path.join(tmpdir, fname)
                             with open(xml_path, 'r', encoding='utf-8') as f:
                                 return f.read()
-        except (subprocess.SubprocessError, FileNotFoundError, OSError):
+        except (subprocess.SubprocessError, FileNotFoundError, OSError, NameError):
             pass
         
         return None
