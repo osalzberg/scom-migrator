@@ -279,6 +279,29 @@ class ManagementPackParser:
         
         logging.info(f'Is ZIP: {is_zip}, Is CAB: {is_cab}')
         
+        # Check for PE/DLL (sealed .mp files are .NET assemblies)
+        is_pe = content[:2] == b'MZ'
+        if is_pe:
+            logging.info('File appears to be a sealed .NET assembly (PE/DLL)')
+            # Sealed management packs are compiled .NET assemblies
+            # The XML is embedded as a .NET resource and requires the .NET runtime to extract
+            # Try our best-effort extraction
+            xml_content = self._extract_xml_from_assembly(content)
+            if xml_content:
+                return xml_content
+            else:
+                # Cannot extract from sealed MP - provide clear guidance
+                raise ValueError(
+                    "This appears to be a sealed Management Pack (.mp file). "
+                    "Sealed MPs are compiled .NET assemblies that require special tools to extract. "
+                    "\\n\\nTo analyze this MP, please export the unsealed XML version from SCOM:\\n"
+                    "1. Open SCOM Console\\n"
+                    "2. Go to Administration > Management Packs\\n"
+                    "3. Right-click the MP and select 'Export Management Pack'\\n"
+                    "4. Save as .xml file and upload that instead\\n\\n"
+                    "Alternatively, look for an .xml version of this MP in the Management Pack catalog."
+                )
+        
         if is_zip or is_cab:
             # Try as ZIP first (some .mp files are ZIP format)
             if is_zip:
@@ -315,6 +338,86 @@ class ManagementPackParser:
             return xml_content
         
         logging.info('Could not extract as archive, treating as raw XML')
+        return None
+    
+    def _extract_xml_from_assembly(self, content: bytes) -> Optional[str]:
+        """
+        Extract XML manifest from a sealed SCOM management pack (.NET assembly).
+        
+        Sealed .mp files are .NET assemblies with embedded XML manifests.
+        The XML is typically stored as a resource or can be found by searching
+        for XML patterns in the binary.
+        
+        Args:
+            content: Raw bytes of the .NET assembly
+            
+        Returns:
+            Extracted XML string or None
+        """
+        import logging
+        import re
+        
+        # Method 1: Search for XML manifest pattern in binary
+        # SCOM MPs typically have XML starting with <?xml or <ManagementPack
+        xml_patterns = [
+            b'<\\?xml[^>]*>\\s*<ManagementPack',
+            b'<ManagementPack[^>]*xmlns',
+            b'<\\?xml[^>]*>\\s*<Manifest',
+        ]
+        
+        for pattern in xml_patterns:
+            match = re.search(pattern, content)
+            if match:
+                start_pos = match.start()
+                logging.info(f'Found XML pattern at position {start_pos}')
+                
+                # Find the end of the XML (look for closing tag)
+                # Try to find </ManagementPack> or </Manifest>
+                end_patterns = [b'</ManagementPack>', b'</Manifest>']
+                end_pos = -1
+                for end_pattern in end_patterns:
+                    pos = content.rfind(end_pattern)
+                    if pos > start_pos:
+                        end_pos = pos + len(end_pattern)
+                        break
+                
+                if end_pos > start_pos:
+                    try:
+                        xml_bytes = content[start_pos:end_pos]
+                        # Try to decode - handle BOM and different encodings
+                        for encoding in ['utf-8', 'utf-16', 'utf-16-le', 'utf-16-be', 'latin-1']:
+                            try:
+                                xml_str = xml_bytes.decode(encoding)
+                                # Validate it's actually XML
+                                if '<ManagementPack' in xml_str or '<Manifest' in xml_str:
+                                    logging.info(f'Successfully extracted XML using {encoding} encoding')
+                                    return xml_str
+                            except (UnicodeDecodeError, UnicodeError):
+                                continue
+                    except Exception as e:
+                        logging.error(f'Error extracting XML: {e}')
+        
+        # Method 2: Look for UTF-16 encoded XML (common in .NET resources)
+        # Search for UTF-16 LE BOM followed by XML declaration
+        utf16_pattern = b'<\x00\\?\x00x\x00m\x00l\x00'
+        match = re.search(utf16_pattern, content)
+        if match:
+            start_pos = match.start()
+            logging.info(f'Found UTF-16 XML at position {start_pos}')
+            # Find end
+            end_marker = b'<\x00/\x00M\x00a\x00n\x00a\x00g\x00e\x00m\x00e\x00n\x00t\x00P\x00a\x00c\x00k\x00>\x00'
+            end_pos = content.find(end_marker, start_pos)
+            if end_pos > 0:
+                end_pos += len(end_marker)
+                try:
+                    xml_str = content[start_pos:end_pos].decode('utf-16-le')
+                    if '<ManagementPack' in xml_str:
+                        logging.info('Successfully extracted UTF-16 XML')
+                        return xml_str
+                except:
+                    pass
+        
+        logging.info('Could not extract XML from assembly')
         return None
     
     def _extract_xml_from_mp_file(self, file_path: Path) -> Optional[str]:
