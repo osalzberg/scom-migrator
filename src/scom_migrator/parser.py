@@ -9,6 +9,9 @@ monitoring configurations including monitors, rules, discoveries, and classes.
 """
 
 import re
+import zipfile
+import tempfile
+import os
 from pathlib import Path
 from typing import Optional, Any
 from xml.etree import ElementTree as ET
@@ -204,27 +207,181 @@ class ManagementPackParser:
                 )
 
     def _load_xml(self) -> None:
-        """Load and parse the XML file or content safely."""
+        """Load and parse the XML file or content safely. Handles both .xml and .mp (CAB) files."""
+        xml_content = None
+        
         if self._content:
-            # Parse from content bytes or string
-            if isinstance(self._content, str):
-                self._root = SafeET.fromstring(self._content)
+            # Check if content is a sealed MP (CAB/ZIP archive)
+            content_bytes = self._content if isinstance(self._content, bytes) else self._content.encode('utf-8')
+            xml_content = self._extract_xml_from_content(content_bytes)
+            
+            if xml_content:
+                self._root = SafeET.fromstring(xml_content)
             else:
-                self._root = SafeET.fromstring(self._content)
+                # Parse as raw XML
+                if isinstance(self._content, str):
+                    self._root = SafeET.fromstring(self._content)
+                else:
+                    self._root = SafeET.fromstring(self._content)
             self._tree = ET.ElementTree(self._root)
         elif self.file_path:
             if not self.file_path.exists():
                 raise FileNotFoundError(f"Management pack not found: {self.file_path}")
             
-            # Use defusedxml for safe parsing
-            self._tree = SafeET.parse(str(self.file_path))
-            self._root = self._tree.getroot()
+            # Check if it's a .mp file (sealed management pack - CAB archive)
+            if self.file_path.suffix.lower() == '.mp':
+                xml_content = self._extract_xml_from_mp_file(self.file_path)
+                if xml_content:
+                    self._root = SafeET.fromstring(xml_content)
+                    self._tree = ET.ElementTree(self._root)
+                else:
+                    raise ValueError(
+                        "Could not extract XML from sealed management pack (.mp file). "
+                        "The file may be corrupted or in an unsupported format. "
+                        "Try exporting the unsealed XML version from SCOM."
+                    )
+            else:
+                # Use defusedxml for safe parsing of regular XML files
+                self._tree = SafeET.parse(str(self.file_path))
+                self._root = self._tree.getroot()
         else:
             raise ValueError("No file path or content provided")
         
         # Detect namespace from root element
         if self._root.tag.startswith("{"):
             self._detected_namespace = self._root.tag.split("}")[0] + "}"
+    
+    def _extract_xml_from_content(self, content: bytes) -> Optional[str]:
+        """
+        Try to extract XML from content that may be a sealed MP (CAB/ZIP archive).
+        
+        Args:
+            content: Raw bytes that may be a CAB/ZIP archive or raw XML
+            
+        Returns:
+            Extracted XML string if content was an archive, None if raw XML
+        """
+        # Check for ZIP/CAB magic bytes
+        # ZIP: PK (0x50 0x4B)
+        # CAB: MSCF (0x4D 0x53 0x43 0x46)
+        if content[:2] == b'PK' or content[:4] == b'MSCF':
+            try:
+                import io
+                # Try as ZIP first (some .mp files are ZIP format)
+                try:
+                    with zipfile.ZipFile(io.BytesIO(content), 'r') as zf:
+                        for name in zf.namelist():
+                            if name.lower().endswith('.xml'):
+                                return zf.read(name).decode('utf-8')
+                        # If no .xml file, try the first file
+                        if zf.namelist():
+                            return zf.read(zf.namelist()[0]).decode('utf-8')
+                except zipfile.BadZipFile:
+                    pass
+                
+                # Try CAB extraction using cabextract or other methods
+                xml_content = self._extract_from_cab_bytes(content)
+                if xml_content:
+                    return xml_content
+                    
+            except Exception:
+                pass
+        
+        return None
+    
+    def _extract_xml_from_mp_file(self, file_path: Path) -> Optional[str]:
+        """
+        Extract XML content from a sealed management pack (.mp) file.
+        
+        Sealed MPs are CAB archives containing the XML manifest.
+        
+        Args:
+            file_path: Path to the .mp file
+            
+        Returns:
+            Extracted XML content as string, or None if extraction failed
+        """
+        # Read the file content
+        with open(file_path, 'rb') as f:
+            content = f.read()
+        
+        # Try extraction from content
+        xml_content = self._extract_xml_from_content(content)
+        if xml_content:
+            return xml_content
+        
+        # Try using system cabextract command (Linux/Mac)
+        try:
+            import subprocess
+            with tempfile.TemporaryDirectory() as tmpdir:
+                result = subprocess.run(
+                    ['cabextract', '-d', tmpdir, str(file_path)],
+                    capture_output=True,
+                    timeout=30
+                )
+                if result.returncode == 0:
+                    # Find extracted XML file
+                    for fname in os.listdir(tmpdir):
+                        if fname.lower().endswith('.xml'):
+                            xml_path = os.path.join(tmpdir, fname)
+                            with open(xml_path, 'r', encoding='utf-8') as f:
+                                return f.read()
+                    # Try first file if no .xml found
+                    files = os.listdir(tmpdir)
+                    if files:
+                        with open(os.path.join(tmpdir, files[0]), 'r', encoding='utf-8') as f:
+                            return f.read()
+        except (subprocess.SubprocessError, FileNotFoundError, OSError):
+            pass
+        
+        # Try using Python's zipfile (some MPs are actually ZIP format)
+        try:
+            with zipfile.ZipFile(file_path, 'r') as zf:
+                for name in zf.namelist():
+                    if name.lower().endswith('.xml'):
+                        return zf.read(name).decode('utf-8')
+                # If no .xml, try first file
+                if zf.namelist():
+                    return zf.read(zf.namelist()[0]).decode('utf-8')
+        except zipfile.BadZipFile:
+            pass
+        
+        return None
+    
+    def _extract_from_cab_bytes(self, content: bytes) -> Optional[str]:
+        """
+        Extract XML from CAB archive bytes using subprocess.
+        
+        Args:
+            content: CAB file content as bytes
+            
+        Returns:
+            Extracted XML string or None
+        """
+        try:
+            import subprocess
+            with tempfile.TemporaryDirectory() as tmpdir:
+                # Write content to temp file
+                cab_path = os.path.join(tmpdir, 'temp.mp')
+                with open(cab_path, 'wb') as f:
+                    f.write(content)
+                
+                # Try cabextract
+                result = subprocess.run(
+                    ['cabextract', '-d', tmpdir, cab_path],
+                    capture_output=True,
+                    timeout=30
+                )
+                if result.returncode == 0:
+                    for fname in os.listdir(tmpdir):
+                        if fname.lower().endswith('.xml'):
+                            xml_path = os.path.join(tmpdir, fname)
+                            with open(xml_path, 'r', encoding='utf-8') as f:
+                                return f.read()
+        except (subprocess.SubprocessError, FileNotFoundError, OSError):
+            pass
+        
+        return None
         
     def _find(self, path: str, element: Optional[ET.Element] = None) -> Optional[ET.Element]:
         """Find element with namespace handling."""

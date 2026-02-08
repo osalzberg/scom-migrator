@@ -1029,7 +1029,17 @@ New-AzResourceGroupDeployment `
             .catch(error => {
                 document.getElementById('loadingSection').style.display = 'none';
                 document.getElementById('uploadSection').style.display = 'block';
-                alert('Error analyzing file: ' + error);
+                
+                let errorMsg = 'Error analyzing file: ' + error;
+                if (error.toString().includes('not well-formed') || error.toString().includes('invalid token')) {
+                    errorMsg = 'Error: Unable to parse this file.\n\n' +
+                        'If this is a sealed Management Pack (.mp file), please try:\n' +
+                        '1. Export the unsealed XML version from SCOM Console\n' +
+                        '2. Right-click the MP > Export Management Pack\n' +
+                        '3. Upload the exported .xml file instead\n\n' +
+                        'Sealed .mp files are compressed archives that may not be fully supported.';
+                }
+                alert(errorMsg);
             });
         }
         
