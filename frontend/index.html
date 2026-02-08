@@ -1018,7 +1018,7 @@ New-AzResourceGroupDeployment `
                 document.getElementById('loadingSection').style.display = 'none';
                 
                 if (data.error) {
-                    alert('Error: ' + data.error);
+                    showUserFriendlyError(data.error);
                     document.getElementById('uploadSection').style.display = 'block';
                     return;
                 }
@@ -1029,20 +1029,57 @@ New-AzResourceGroupDeployment `
             .catch(error => {
                 document.getElementById('loadingSection').style.display = 'none';
                 document.getElementById('uploadSection').style.display = 'block';
-                
-                let errorMsg = 'Error analyzing file: ' + error;
-                if (error.toString().includes('not well-formed') || error.toString().includes('invalid token')) {
-                    errorMsg = 'Error: Unable to parse this file.\n\n' +
-                        'If this is a sealed Management Pack (.mp file):\n' +
-                        'Sealed MPs are compiled .NET assemblies that cannot be directly parsed.\n\n' +
-                        'Please export the unsealed XML version from SCOM:\n' +
-                        '1. Open SCOM Console\n' +
-                        '2. Go to Administration > Management Packs\n' +
-                        '3. Right-click the MP > Export Management Pack\n' +
-                        '4. Upload the exported .xml file instead';
-                }
-                alert(errorMsg);
+                showUserFriendlyError(error.toString());
             });
+        }
+        
+        function showUserFriendlyError(errorMsg) {
+            // Check for our specific error types and show friendly modal
+            if (errorMsg.includes('SEALED_MP:') || errorMsg.includes('MPB_BUNDLE:') || 
+                errorMsg.includes('sealed Management Pack') || errorMsg.includes('Management Pack Bundle') ||
+                errorMsg.includes('not well-formed') || errorMsg.includes('invalid token')) {
+                
+                // Show a nice modal instead of alert
+                const modal = document.createElement('div');
+                modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:1000;';
+                
+                const isSealed = errorMsg.includes('SEALED_MP:') || errorMsg.includes('sealed');
+                const isMPB = errorMsg.includes('MPB_BUNDLE:') || errorMsg.includes('Bundle');
+                
+                let title = '📦 Sealed Management Pack Detected';
+                let fileType = '.mp file';
+                if (isMPB) {
+                    title = '📦 Management Pack Bundle Detected';
+                    fileType = '.mpb bundle';
+                }
+                
+                modal.innerHTML = `
+                    <div style="background:white;border-radius:12px;padding:32px;max-width:500px;margin:20px;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
+                        <h2 style="margin:0 0 16px 0;color:#0078d4;font-size:20px;">${title}</h2>
+                        <p style="color:#333;margin:0 0 20px 0;line-height:1.6;">
+                            This ${fileType} cannot be analyzed directly. Please export it as XML from SCOM.
+                        </p>
+                        <div style="background:#f5f5f5;border-radius:8px;padding:16px;margin-bottom:20px;">
+                            <p style="margin:0 0 12px 0;font-weight:600;color:#333;">How to export:</p>
+                            <ol style="margin:0;padding-left:20px;color:#555;line-height:1.8;">
+                                <li>Open <strong>SCOM Console</strong></li>
+                                <li>Go to <strong>Administration → Management Packs</strong></li>
+                                <li>Right-click the MP → <strong>Export Management Pack</strong></li>
+                                <li>Save as <strong>.xml</strong> and upload here</li>
+                            </ol>
+                        </div>
+                        <button onclick="this.closest('div').parentElement.remove()" 
+                            style="background:#0078d4;color:white;border:none;padding:12px 32px;border-radius:6px;cursor:pointer;font-size:14px;font-weight:500;">
+                            Got it
+                        </button>
+                    </div>
+                `;
+                document.body.appendChild(modal);
+                modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+            } else {
+                // Generic error
+                alert('Error: ' + errorMsg);
+            }
         }
         
         function displayResults(data) {

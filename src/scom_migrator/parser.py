@@ -307,14 +307,8 @@ class ManagementPackParser:
             else:
                 # Cannot extract from sealed MP - provide clear guidance
                 raise ValueError(
-                    "This appears to be a sealed Management Pack (.mp file). "
-                    "Sealed MPs are compiled .NET assemblies that require special tools to extract. "
-                    "\\n\\nTo analyze this MP, please export the unsealed XML version from SCOM:\\n"
-                    "1. Open SCOM Console\\n"
-                    "2. Go to Administration > Management Packs\\n"
-                    "3. Right-click the MP and select 'Export Management Pack'\\n"
-                    "4. Save as .xml file and upload that instead\\n\\n"
-                    "Alternatively, look for an .xml version of this MP in the Management Pack catalog."
+                    "SEALED_MP: This is a sealed Management Pack (.mp file) which cannot be directly analyzed. "
+                    "Please export it as XML from SCOM: Administration → Management Packs → Right-click → Export Management Pack → Save as .xml"
                 )
         
         if is_zip or is_cab:
@@ -454,12 +448,8 @@ class ManagementPackParser:
         if not HAS_OLEFILE:
             logging.warning('olefile library not available, cannot extract from OLE document')
             raise ValueError(
-                "This appears to be a Management Pack Bundle (.mpb file). "
-                "The olefile library is required to extract content from MPB bundles. "
-                "Please install it with: pip install olefile\\n\\n"
-                "Alternatively, extract the individual MPs from the bundle using SCOM:\\n"
-                "1. Import the MPB into SCOM\\n"
-                "2. Export each MP individually as XML"
+                "MPB_BUNDLE: This is a Management Pack Bundle (.mpb file). "
+                "Please export the individual MPs as XML from SCOM: Administration → Management Packs → Right-click → Export Management Pack → Save as .xml"
             )
         
         try:
@@ -527,21 +517,15 @@ class ManagementPackParser:
             logging.info('No XML content found in OLE streams')
             # Provide a helpful error message for MPB files that couldn't be extracted
             raise ValueError(
-                "This Management Pack Bundle (.mpb) file uses LZX compression which requires "
-                "the 'cabextract' system utility to extract.\\n\\n"
-                "Please export the MP as XML from SCOM Console instead:\\n"
-                "1. Import the MPB into SCOM if not already done\\n"
-                "2. Go to Administration > Management Packs\\n"
-                "3. Right-click the MP and select 'Export Management Pack'\\n"
-                "4. Save as .xml file and upload that instead"
+                "MPB_BUNDLE: This Management Pack Bundle (.mpb file) cannot be extracted in this environment. "
+                "Please export the MP as XML from SCOM: Administration → Management Packs → Right-click → Export Management Pack → Save as .xml"
             )
             
         except Exception as e:
             logging.error(f'Error parsing OLE file: {e}')
             raise ValueError(
-                f"Failed to extract content from this Management Pack Bundle (.mpb file). "
-                f"Error: {str(e)}\\n\\n"
-                "Please try exporting the MP as XML from SCOM Console instead."
+                f"MPB_BUNDLE: Failed to extract this Management Pack Bundle. "
+                f"Please export the MP as XML from SCOM: Administration → Management Packs → Right-click → Export Management Pack → Save as .xml"
             )
     
     def _extract_xml_from_mp_file(self, file_path: Path) -> Optional[str]:
