@@ -3,6 +3,7 @@
 [![Azure Static Web Apps](https://img.shields.io/badge/Azure-Static%20Web%20Apps-0078d4?logo=microsoft-azure)](https://icy-wave-02c4e6b03.2.azurestaticapps.net)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue?logo=python)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![GitHub Discussions](https://img.shields.io/badge/Discussions-Join%20the%20Community-blue?logo=github)](https://github.com/osalzberg/scom-migrator/discussions)
 
 A comprehensive web-based tool for migrating **System Center Operations Manager (SCOM)** Management Packs to **Azure Monitor**. Upload your SCOM MP XML files and get instant analysis, migration recommendations, and deployable ARM templates.
 
@@ -11,6 +12,16 @@ A comprehensive web-based tool for migrating **System Center Operations Manager 
 **[Launch the Web Tool →](https://icy-wave-02c4e6b03.2.azurestaticapps.net)**
 
 No installation required - just upload your Management Pack XML and get results instantly.
+
+---
+
+## 💬 Community & Feedback
+
+We'd love to hear from you! This is a community-driven project.
+
+- **[💡 Share Ideas & Feedback](https://github.com/osalzberg/scom-migrator/discussions)** - Join the discussion
+- **[🐛 Report Issues](https://github.com/osalzberg/scom-migrator/issues/new/choose)** - Bug reports and feature requests
+- **[⭐ Star the Repo](https://github.com/osalzberg/scom-migrator)** - Show your support!
 
 ---
 

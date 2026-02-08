@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Questions & Discussion
+    url: https://github.com/osalzberg/scom-migrator/discussions
+    about: Ask questions, share ideas, and connect with other users
+  - name: Azure Monitor Documentation
+    url: https://docs.microsoft.com/azure/azure-monitor/
+    about: Official Azure Monitor documentation
