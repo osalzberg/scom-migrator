@@ -268,32 +268,53 @@ class ManagementPackParser:
         Returns:
             Extracted XML string if content was an archive, None if raw XML
         """
+        import logging
+        logging.info(f'Checking content type, first 10 bytes: {content[:10]}')
+        
         # Check for ZIP/CAB magic bytes
         # ZIP: PK (0x50 0x4B)
         # CAB: MSCF (0x4D 0x53 0x43 0x46)
-        if content[:2] == b'PK' or content[:4] == b'MSCF':
-            try:
-                import io
-                # Try as ZIP first (some .mp files are ZIP format)
+        is_zip = content[:2] == b'PK'
+        is_cab = content[:4] == b'MSCF'
+        
+        logging.info(f'Is ZIP: {is_zip}, Is CAB: {is_cab}')
+        
+        if is_zip or is_cab:
+            # Try as ZIP first (some .mp files are ZIP format)
+            if is_zip:
                 try:
                     with zipfile.ZipFile(io.BytesIO(content), 'r') as zf:
+                        logging.info(f'ZIP file contains: {zf.namelist()}')
                         for name in zf.namelist():
                             if name.lower().endswith('.xml'):
                                 return zf.read(name).decode('utf-8')
                         # If no .xml file, try the first file
                         if zf.namelist():
                             return zf.read(zf.namelist()[0]).decode('utf-8')
-                except zipfile.BadZipFile:
-                    pass
-                
-                # Try CAB extraction using cabextract or other methods
-                xml_content = self._extract_from_cab_bytes(content)
-                if xml_content:
-                    return xml_content
-                    
-            except Exception:
-                pass
+                except zipfile.BadZipFile as e:
+                    logging.info(f'Not a valid ZIP file: {e}')
+            
+            # Try CAB extraction
+            xml_content = self._extract_from_cab_bytes(content)
+            if xml_content:
+                logging.info('Successfully extracted XML from CAB')
+                return xml_content
+            else:
+                logging.info('CAB extraction returned None')
         
+        # Not an archive, check if it starts with XML marker
+        if content.strip()[:5] in [b'<?xml', b'<Mani', b'<mani']:
+            logging.info('Content appears to be raw XML')
+            return None  # Return None to indicate it should be parsed as raw XML
+            
+        # Try CAB extraction anyway (some files don't have proper magic bytes)
+        logging.info('Trying CAB extraction as fallback...')
+        xml_content = self._extract_from_cab_bytes(content)
+        if xml_content:
+            logging.info('Fallback CAB extraction succeeded')
+            return xml_content
+        
+        logging.info('Could not extract as archive, treating as raw XML')
         return None
     
     def _extract_xml_from_mp_file(self, file_path: Path) -> Optional[str]:
@@ -365,29 +386,39 @@ class ManagementPackParser:
         Returns:
             Extracted XML string or None
         """
+        import logging
+        
         # Try using cabarchive library first (pure Python, works everywhere)
+        logging.info(f'HAS_CABARCHIVE: {HAS_CABARCHIVE}')
         if HAS_CABARCHIVE:
             try:
+                logging.info('Attempting to parse with cabarchive library...')
                 cab = CabArchive(content)
+                files_in_cab = []
                 for cf in cab:
+                    files_in_cab.append(cf.filename)
                     # Look for XML file in the archive
                     if cf.filename.lower().endswith('.xml'):
+                        logging.info(f'Found XML file in CAB: {cf.filename}')
                         return cf.buf.decode('utf-8')
+                logging.info(f'Files in CAB: {files_in_cab}')
                 # If no .xml file found, try the first file
                 for cf in cab:
                     try:
                         content_str = cf.buf.decode('utf-8')
                         # Check if it looks like XML
                         if content_str.strip().startswith('<?xml') or content_str.strip().startswith('<'):
+                            logging.info(f'Using non-.xml file that contains XML: {cf.filename}')
                             return content_str
                     except UnicodeDecodeError:
                         continue
-            except Exception:
-                pass
+            except Exception as e:
+                logging.error(f'cabarchive extraction failed: {e}')
         
         # Fallback: try using subprocess cabextract (Linux/Mac)
         try:
             import subprocess
+            logging.info('Trying subprocess cabextract...')
             with tempfile.TemporaryDirectory() as tmpdir:
                 # Write content to temp file
                 cab_path = os.path.join(tmpdir, 'temp.mp')

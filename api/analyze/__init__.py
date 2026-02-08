@@ -56,15 +56,16 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
         
         # Check file extension
         ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
-        if ext not in ['xml', 'mp']:
+        if ext not in ['xml', 'mp', 'mpb']:
             return func.HttpResponse(
-                json.dumps({'error': 'Invalid file type. Please upload .xml or .mp file'}),
+                json.dumps({'error': 'Invalid file type. Please upload .xml, .mp, or .mpb file'}),
                 status_code=400,
                 mimetype='application/json'
             )
         
-        # Read file content
+        # Read file content as bytes
         content = file.read()
+        logging.info(f'File uploaded: {filename}, size: {len(content)} bytes, first 20 bytes: {content[:20]}')
         
         # Parse and analyze
         parser = ManagementPackParser(content=content)
