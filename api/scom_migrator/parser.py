@@ -25,6 +25,12 @@ try:
 except ImportError:
     HAS_CABARCHIVE = False
 
+try:
+    import olefile
+    HAS_OLEFILE = True
+except ImportError:
+    HAS_OLEFILE = False
+
 from .models import (
     ManagementPack,
     ManagementPackMetadata,
@@ -271,6 +277,15 @@ class ManagementPackParser:
         import logging
         logging.info(f'Checking content type, first 10 bytes: {content[:10]}')
         
+        # Check for OLE Compound Document (MPB bundles use this format)
+        # Magic bytes: D0 CF 11 E0 A1 B1 1A E1
+        is_ole = content[:8] == b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1'
+        if is_ole:
+            logging.info('File appears to be an OLE Compound Document (MPB bundle)')
+            xml_content = self._extract_xml_from_ole(content)
+            if xml_content:
+                return xml_content
+        
         # Check for ZIP/CAB magic bytes
         # ZIP: PK (0x50 0x4B)
         # CAB: MSCF (0x4D 0x53 0x43 0x46)
@@ -419,6 +434,115 @@ class ManagementPackParser:
         
         logging.info('Could not extract XML from assembly')
         return None
+    
+    def _extract_xml_from_ole(self, content: bytes) -> Optional[str]:
+        """
+        Extract XML manifest from an OLE Compound Document (.mpb bundle).
+        
+        MPB (Management Pack Bundle) files are OLE Compound Documents that
+        contain multiple management packs. The XML manifests are stored
+        in streams within the OLE structure.
+        
+        Args:
+            content: Raw bytes of the OLE Compound Document
+            
+        Returns:
+            Extracted XML string or None
+        """
+        import logging
+        
+        if not HAS_OLEFILE:
+            logging.warning('olefile library not available, cannot extract from OLE document')
+            raise ValueError(
+                "This appears to be a Management Pack Bundle (.mpb file). "
+                "The olefile library is required to extract content from MPB bundles. "
+                "Please install it with: pip install olefile\\n\\n"
+                "Alternatively, extract the individual MPs from the bundle using SCOM:\\n"
+                "1. Import the MPB into SCOM\\n"
+                "2. Export each MP individually as XML"
+            )
+        
+        try:
+            import io
+            ole = olefile.OleFileIO(io.BytesIO(content))
+            
+            logging.info(f'OLE file opened, root entries: {ole.listdir()}')
+            
+            xml_contents = []
+            
+            # Iterate through all streams in the OLE file
+            for entry in ole.listdir():
+                stream_name = '/'.join(entry)
+                logging.info(f'Found OLE stream: {stream_name}')
+                
+                try:
+                    stream_data = ole.openstream(entry).read()
+                    
+                    # Check if this stream contains XML
+                    # Look for common XML markers
+                    if (stream_data.strip()[:5] in [b'<?xml', b'<Mani', b'<mani'] or
+                        b'<ManagementPack' in stream_data[:1000] or
+                        b'<Manifest' in stream_data[:1000]):
+                        
+                        # Try to decode the XML
+                        for encoding in ['utf-8', 'utf-16', 'utf-16-le', 'utf-16-be', 'latin-1']:
+                            try:
+                                xml_str = stream_data.decode(encoding)
+                                if '<ManagementPack' in xml_str or '<Manifest' in xml_str:
+                                    logging.info(f'Found XML in stream: {stream_name} ({encoding})')
+                                    xml_contents.append(xml_str)
+                                    break
+                            except (UnicodeDecodeError, UnicodeError):
+                                continue
+                    
+                    # Also check for compressed/nested CAB files within the OLE
+                    elif stream_data[:4] == b'MSCF':
+                        logging.info(f'Found embedded CAB in stream: {stream_name}')
+                        nested_xml = self._extract_from_cab_bytes(stream_data)
+                        if nested_xml:
+                            xml_contents.append(nested_xml)
+                        else:
+                            # CAB extraction failed - likely LZX compression without cabextract
+                            logging.warning(f'Failed to extract CAB from OLE stream: {stream_name}')
+                    
+                    # Check for nested OLE
+                    elif stream_data[:8] == b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1':
+                        logging.info(f'Found nested OLE in stream: {stream_name}')
+                        nested_xml = self._extract_xml_from_ole(stream_data)
+                        if nested_xml:
+                            xml_contents.append(nested_xml)
+                            
+                except Exception as e:
+                    logging.debug(f'Error reading stream {stream_name}: {e}')
+                    continue
+            
+            ole.close()
+            
+            if xml_contents:
+                # If we found multiple XMLs, return the first one for now
+                # (could be enhanced to merge or handle multiple MPs)
+                logging.info(f'Extracted {len(xml_contents)} XML document(s) from OLE')
+                return xml_contents[0]
+            
+            logging.info('No XML content found in OLE streams')
+            # Provide a helpful error message for MPB files that couldn't be extracted
+            raise ValueError(
+                "This Management Pack Bundle (.mpb) file uses LZX compression which requires "
+                "the 'cabextract' system utility to extract.\\n\\n"
+                "Please export the MP as XML from SCOM Console instead:\\n"
+                "1. Import the MPB into SCOM if not already done\\n"
+                "2. Go to Administration > Management Packs\\n"
+                "3. Right-click the MP and select 'Export Management Pack'\\n"
+                "4. Save as .xml file and upload that instead"
+            )
+            
+        except Exception as e:
+            logging.error(f'Error parsing OLE file: {e}')
+            raise ValueError(
+                f"Failed to extract content from this Management Pack Bundle (.mpb file). "
+                f"Error: {str(e)}\\n\\n"
+                "Please try exporting the MP as XML from SCOM Console instead."
+            )
     
     def _extract_xml_from_mp_file(self, file_path: Path) -> Optional[str]:
         """
