@@ -213,6 +213,14 @@ class ARMTemplateGenerator:
     def _generate_parameters(self, workspace_name: str) -> dict[str, Any]:
         """Generate ARM template parameters."""
         return {
+            "createNewWorkspace": {
+                "type": "string",
+                "defaultValue": "Use existing workspace",
+                "allowedValues": ["Create new workspace", "Use existing workspace"],
+                "metadata": {
+                    "description": "Choose whether to create a NEW Log Analytics workspace or use an EXISTING one."
+                }
+            },
             "workspaceName": {
                 "type": "string",
                 "defaultValue": workspace_name,
@@ -262,6 +270,7 @@ class ARMTemplateGenerator:
     def _generate_variables(self, report: MigrationReport) -> dict[str, Any]:
         """Generate ARM template variables."""
         return {
+            "isCreateNewWorkspace": "[equals(parameters('createNewWorkspace'), 'Create new workspace')]",
             "workspaceId": "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspaceName'))]",
             "actionGroupId": "[resourceId('Microsoft.Insights/actionGroups', parameters('actionGroupName'))]",
             "migrationSource": report.management_pack.name,
@@ -275,6 +284,7 @@ class ARMTemplateGenerator:
             api_version=self.API_VERSIONS["Microsoft.OperationalInsights/workspaces"],
             name="[parameters('workspaceName')]",
             location=location,
+            condition="[variables('isCreateNewWorkspace')]",
             properties={
                 "sku": {
                     "name": "PerGB2018"

@@ -337,6 +337,7 @@ class ARMResource(BaseModel):
     api_version: str
     name: str
     location: str = "[resourceGroup().location]"
+    condition: Optional[str] = None  # ARM condition expression
     kind: Optional[str] = None  # For resources that need kind (e.g., DCR: "Windows" or "Linux")
     properties: dict[str, Any] = Field(default_factory=dict)
     depends_on: list[str] = Field(default_factory=list)
@@ -365,6 +366,9 @@ class ARMTemplate(BaseModel):
                 "dependsOn": r.depends_on,
                 "tags": r.tags,
             }
+            # Add condition if present
+            if r.condition:
+                resource_dict["condition"] = r.condition
             # Add kind if present (required for DCRs)
             if r.kind:
                 resource_dict["kind"] = r.kind
