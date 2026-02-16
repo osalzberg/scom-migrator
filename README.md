@@ -140,8 +140,9 @@ source venv/bin/activate  # Windows: venv\Scripts\activate
 # Install dependencies
 pip install -e ".[dev]"
 
-# Run the web server locally
-python run_web.py
+# Run locally with SWA CLI
+npm install -g @azure/static-web-apps-cli
+swa start frontend --api-location api
 ```
 
 ---
