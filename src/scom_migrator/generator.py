@@ -1142,9 +1142,10 @@ class ARMTemplateGenerator:
         # Combine parameters (deduplicate)
         combined_params = {
             "createNewWorkspace": {
-                "type": "bool",
-                "defaultValue": False,
-                "metadata": {"description": "Set to true to create a NEW Log Analytics workspace. Set to false to use an EXISTING workspace (specify name in workspaceName parameter)."}
+                "type": "string",
+                "defaultValue": "Use existing workspace",
+                "allowedValues": ["Create new workspace", "Use existing workspace"],
+                "metadata": {"description": "Choose whether to create a NEW Log Analytics workspace or use an EXISTING one."}
             },
             "workspaceName": {
                 "type": "string",
@@ -1212,6 +1213,7 @@ class ARMTemplateGenerator:
         # Logic: if createNewWorkspace=true OR workspaceResourceId is empty, use workspaceName in current RG
         #        otherwise use the provided workspaceResourceId (for workspace in different RG)
         combined_vars = {
+            "isCreateNewWorkspace": "[equals(parameters('createNewWorkspace'), 'Create new workspace')]",
             "actualWorkspaceResourceId": "[if(not(empty(parameters('workspaceResourceId'))), parameters('workspaceResourceId'), resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspaceName')))]",
             "workspaceId": "[if(not(empty(parameters('workspaceResourceId'))), parameters('workspaceResourceId'), resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspaceName')))]",
             "actionGroupId": "[resourceId('Microsoft.Insights/actionGroups', parameters('actionGroupName'))]",
@@ -1225,7 +1227,7 @@ class ARMTemplateGenerator:
         
         # Add Log Analytics workspace (conditional)
         workspace_resource = {
-            "condition": "[parameters('createNewWorkspace')]",
+            "condition": "[variables('isCreateNewWorkspace')]",
             "type": "Microsoft.OperationalInsights/workspaces",
             "apiVersion": "2022-10-01",
             "name": "[parameters('workspaceName')]",
@@ -1260,7 +1262,7 @@ class ARMTemplateGenerator:
                 # (user must ensure workspace exists if createNewWorkspace=false)
                 # Use condition to only depend when creating new
                 alert_res["dependsOn"] = [
-                    "[if(parameters('createNewWorkspace'), concat('Microsoft.OperationalInsights/workspaces/', parameters('workspaceName')), concat('Microsoft.Insights/actionGroups/', parameters('actionGroupName')))]"
+                    "[if(variables('isCreateNewWorkspace'), concat('Microsoft.OperationalInsights/workspaces/', parameters('workspaceName')), concat('Microsoft.Insights/actionGroups/', parameters('actionGroupName')))]"
                 ]
                 combined_resources.append(alert_res)
         
@@ -1270,7 +1272,7 @@ class ARMTemplateGenerator:
             dcr_res = res.copy()
             # Always deploy - workspace is resolved from name or resourceId
             dcr_res["dependsOn"] = [
-                "[if(parameters('createNewWorkspace'), concat('Microsoft.OperationalInsights/workspaces/', parameters('workspaceName')), concat('Microsoft.Insights/actionGroups/', parameters('actionGroupName')))]"
+                "[if(variables('isCreateNewWorkspace'), concat('Microsoft.OperationalInsights/workspaces/', parameters('workspaceName')), concat('Microsoft.Insights/actionGroups/', parameters('actionGroupName')))]"
             ]
             # Update workspaceResourceId reference
             if "properties" in dcr_res and "destinations" in dcr_res.get("properties", {}):
@@ -1292,7 +1294,7 @@ class ARMTemplateGenerator:
                 workbook_res["properties"]["displayName"] = "[parameters('workbookDisplayName')]"
                 workbook_res["properties"]["sourceId"] = "[variables('actualWorkspaceResourceId')]"
                 workbook_res["dependsOn"] = [
-                    "[if(parameters('createNewWorkspace'), concat('Microsoft.OperationalInsights/workspaces/', parameters('workspaceName')), concat('Microsoft.Insights/actionGroups/', parameters('actionGroupName')))]"
+                    "[if(variables('isCreateNewWorkspace'), concat('Microsoft.OperationalInsights/workspaces/', parameters('workspaceName')), concat('Microsoft.Insights/actionGroups/', parameters('actionGroupName')))]"
                 ]
                 # Add tags with readable name for reference
                 workbook_res["tags"] = {
@@ -1308,7 +1310,7 @@ class ARMTemplateGenerator:
             # Custom log DCR requires a Data Collection Endpoint
             custom_res["condition"] = "[not(empty(parameters('dataCollectionEndpointId')))]"
             custom_res["dependsOn"] = [
-                "[if(parameters('createNewWorkspace'), concat('Microsoft.OperationalInsights/workspaces/', parameters('workspaceName')), concat('Microsoft.Insights/actionGroups/', parameters('actionGroupName')))]"
+                "[if(variables('isCreateNewWorkspace'), concat('Microsoft.OperationalInsights/workspaces/', parameters('workspaceName')), concat('Microsoft.Insights/actionGroups/', parameters('actionGroupName')))]"
             ]
             # Update workspaceResourceId reference and fix the properties
             if "properties" in custom_res:

@@ -47,23 +47,19 @@ HTML_TEMPLATE = """
             --success-green: #107c10;
             --warning-orange: #ff8c00;
             --error-red: #e81123;
-            --microsoft-gray: #f3f2f1;
-            --dark-gray: #323130;
-            --light-gray: #faf9f8;
-            --border-gray: #edebe9;
-            --text-gray: #605e5c;
-            --gradient-1: linear-gradient(135deg, #0078d4 0%, #004578 100%);
-            --gradient-accent: linear-gradient(135deg, #50a0e0 0%, #0078d4 100%);
-            --card-shadow: 0 4px 12px rgba(0,0,0,0.08);
-            --hover-shadow: 0 8px 24px rgba(0,0,0,0.12);
+            --gradient-1: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --gradient-2: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            --gradient-3: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            --card-shadow: 0 10px 40px rgba(0,0,0,0.15);
+            --hover-shadow: 0 15px 50px rgba(0,0,0,0.25);
         }
         
         * {
-            font-family: 'Segoe UI', 'Inter', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         }
         
         body {
-            background: #f3f2f1;
+            background: var(--gradient-1);
             min-height: 100vh;
             background-attachment: fixed;
         }
@@ -489,22 +485,28 @@ HTML_TEMPLATE = """
                             
                             <!-- Stats -->
                             <div class="row g-3 mb-4">
-                                <div class="col-md-4 col-sm-6">
+                                <div class="col-md-3 col-sm-6">
                                     <div class="stat-card">
-                                        <h3 id="totalComponents" style="color: #0078d4;">0</h3>
+                                        <h3 id="totalComponents">0</h3>
                                         <small>Total Components</small>
                                     </div>
                                 </div>
-                                <div class="col-md-4 col-sm-6">
+                                <div class="col-md-3 col-sm-6">
                                     <div class="stat-card">
-                                        <h3 id="migratableCount" style="color: #107c10;">0</h3>
+                                        <h3 id="migratableCount" class="text-success">0</h3>
                                         <small>Easily Migratable</small>
                                     </div>
                                 </div>
-                                <div class="col-md-4 col-sm-6">
+                                <div class="col-md-3 col-sm-6">
                                     <div class="stat-card">
-                                        <h3 id="manualCount" style="color: #ff8c00;">0</h3>
+                                        <h3 id="manualCount" class="text-warning">0</h3>
                                         <small>Manual Review</small>
+                                    </div>
+                                </div>
+                                <div class="col-md-3 col-sm-6">
+                                    <div class="stat-card">
+                                        <h3 id="effortHours">0</h3>
+                                        <small>Est. Hours</small>
                                     </div>
                                 </div>
                             </div>
@@ -590,40 +592,25 @@ HTML_TEMPLATE = """
                                     <h6 class="mb-0"><i class="bi bi-download me-2"></i>Download Migration Artifacts</h6>
                                 </div>
                                 <div class="card-body">
-                                    <div class="alert alert-warning mb-3" style="background: linear-gradient(135deg, #fff3cd 0%, #ffe5a0 100%); border: 2px solid #ffc107; border-radius: 10px;">
-                                        <div class="d-flex align-items-center">
-                                            <i class="bi bi-exclamation-triangle-fill me-3 fs-4" style="color: #ff8c00;"></i>
-                                            <div>
-                                                <strong>⚠️ Testing Status:</strong>
-                                                <p class="mb-0 small mt-1">
-                                                    Download functionality has <strong>not been fully tested</strong>. 
-                                                    Please verify the downloaded artifacts before using them in production environments.
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
                                     <div class="row g-3">
                                         <div class="col-md-4">
                                             <div class="d-grid">
-                                                <button class="btn btn-outline-primary" onclick="downloadArtifact('arm')" title="Not fully tested - verify before use">
+                                                <button class="btn btn-outline-primary" onclick="downloadArtifact('arm')">
                                                     <i class="bi bi-filetype-json me-2"></i>ARM Template
-                                                    <span class="badge bg-warning text-dark ms-2" style="font-size: 0.65rem;">UNTESTED</span>
                                                 </button>
                                             </div>
                                         </div>
                                         <div class="col-md-4">
                                             <div class="d-grid">
-                                                <button class="btn btn-outline-primary" onclick="downloadArtifact('report')" title="Not fully tested - verify before use">
+                                                <button class="btn btn-outline-primary" onclick="downloadArtifact('report')">
                                                     <i class="bi bi-file-earmark-text me-2"></i>Full Report (JSON)
-                                                    <span class="badge bg-warning text-dark ms-2" style="font-size: 0.65rem;">UNTESTED</span>
                                                 </button>
                                             </div>
                                         </div>
                                         <div class="col-md-4">
                                             <div class="d-grid">
-                                                <button class="btn btn-outline-primary" onclick="downloadArtifact('dcr')" title="Not fully tested - verify before use">
+                                                <button class="btn btn-outline-primary" onclick="downloadArtifact('dcr')">
                                                     <i class="bi bi-gear me-2"></i>Data Collection Rules
-                                                    <span class="badge bg-warning text-dark ms-2" style="font-size: 0.65rem;">UNTESTED</span>
                                                 </button>
                                             </div>
                                         </div>
@@ -666,28 +653,33 @@ HTML_TEMPLATE = """
                 </div>
                 
                 <!-- Disclaimer -->
-                <div class="mt-4 p-3" style="background: rgba(255,255,255,0.7); border-radius: 8px;">
-                    <p class="mb-2" style="font-size: 0.7rem; color: #8a8886; line-height: 1.4;">
-                        <strong style="color: #605e5c;">Disclaimer:</strong> 
-                        This web application is provided as-is for informational and educational purposes. 
-                        The use of this application and any generated ARM templates, migration reports, or artifacts is at your own risk. 
-                        This tool is not officially supported or endorsed by Microsoft Corporation. Microsoft Corporation assumes no 
-                        responsibility or liability for the use of this tool or any content generated through it. Users are responsible 
-                        for testing and validating all generated templates and configurations in their environment before production deployment.
-                    </p>
-                    <p class="mb-0" style="font-size: 0.65rem; color: #a19f9d;">
-                        <strong>Trademarks:</strong> Microsoft, Azure, Azure Monitor, System Center Operations Manager (SCOM), 
-                        Windows, and other product names referenced are trademarks or registered trademarks of Microsoft Corporation 
-                        in the United States and/or other countries.
-                    </p>
+                <div class="card mt-4" style="background: rgba(255,255,255,0.95);">
+                    <div class="card-body p-4">
+                        <h6 class="text-muted mb-3">
+                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                            Disclaimer
+                        </h6>
+                        <p class="small text-muted mb-2">
+                            This web application is provided <strong>as-is</strong> for informational and educational purposes. 
+                            The use of this application and any generated ARM templates, migration reports, or artifacts is at your own risk. 
+                            This tool is not officially supported or endorsed by Microsoft Corporation. Microsoft Corporation assumes no 
+                            responsibility or liability for the use of this tool or any content generated through it. Users are responsible 
+                            for testing and validating all generated templates and configurations in their environment before production deployment.
+                        </p>
+                        <p class="small text-muted mb-0">
+                            <strong>Trademarks:</strong> Microsoft, Azure, Azure Monitor, System Center Operations Manager (SCOM), 
+                            Windows, and other product names referenced are trademarks or registered trademarks of Microsoft Corporation 
+                            in the United States and/or other countries.
+                        </p>
+                    </div>
                 </div>
                 
-                <div class="footer-text text-center" style="margin-top: 2rem; margin-bottom: 2rem;">
-                    <p class="mb-1" style="color: #605e5c;">
+                <div class="footer-text">
+                    <p class="mb-0">
                         <i class="bi bi-shield-check me-1"></i>
                         SCOM to Azure Monitor Migration Tool v1.0.0
                     </p>
-                    <small style="color: #8a8886;">Community Tool • Not Officially Supported</small>
+                    <small>Community Tool • Not Officially Supported</small>
                 </div>
             </div>
         </div>
@@ -824,6 +816,7 @@ HTML_TEMPLATE = """
             animateValue('totalComponents', 0, data.total_components, 1000);
             animateValue('migratableCount', 0, data.migratable_components, 1000);
             animateValue('manualCount', 0, data.requires_manual_review, 1000);
+            animateValue('effortHours', 0, data.estimated_effort_hours, 1000);
             
             // Complexity breakdown
             const stats = data.stats || {};
@@ -1058,20 +1051,8 @@ def analyze():
         file.save(filepath)
         
         # Parse and analyze
-        try:
-            parser = ManagementPackParser(filepath)
-            mp = parser.parse()
-        except Exception as parse_error:
-            # Clean up on error
-            if os.path.exists(filepath):
-                os.remove(filepath)
-            error_msg = str(parse_error)
-            if "XML" in error_msg or "xml" in error_msg or "parse" in error_msg.lower():
-                return jsonify({'error': f'Invalid Management Pack XML: The file appears to be corrupted or is not a valid SCOM Management Pack. Please ensure you are uploading a valid .xml or .mp file. Details: {error_msg}'}), 400
-            elif "encoding" in error_msg.lower() or "decode" in error_msg.lower():
-                return jsonify({'error': 'File encoding error: The file could not be read. Please ensure it is a valid UTF-8 or UTF-16 encoded XML file.'}), 400
-            else:
-                return jsonify({'error': f'Failed to parse Management Pack: {error_msg}'}), 400
+        parser = ManagementPackParser(filepath)
+        mp = parser.parse()
         
         analyzer = MigrationAnalyzer()
         report = analyzer.analyze(mp)
@@ -1101,7 +1082,7 @@ def analyze():
         return jsonify(result)
         
     except Exception as e:
-        return jsonify({'error': f'An unexpected error occurred while analyzing the Management Pack. Please try again or contact support if the issue persists. Details: {str(e)}'}), 500
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/download/<artifact_type>')
 def download(artifact_type):
