@@ -859,6 +859,10 @@ Perf
         """Map Windows service monitoring to Azure Monitor."""
         service_name = data_source.service_name or "YourServiceName"
         
+        # Sanitize SCOM expressions (e.g. $Config/ServiceName$)
+        if self._is_scom_expression(service_name):
+            service_name = "YourServiceName"
+        
         # Generate specific KQL query with the actual service name - Modern approach using Event ID 7036
         kql_query_event_log = f"""// Monitor {service_name} service via Event ID 7036 (Service Control Manager)
 // This is the MODERN RECOMMENDED approach for service monitoring
@@ -1307,23 +1311,91 @@ CustomLog_CL
             ),
         ]
     
+    @staticmethod
+    def _is_scom_expression(value: str) -> bool:
+        """Check if a value contains SCOM runtime expression references.
+        
+        SCOM uses expressions like $Target/Property[Type="..."]$, $Config/...$,
+        and $Data/Property[...]$ that are resolved at runtime and cannot be
+        embedded literally into KQL queries.
+        """
+        if not value:
+            return False
+        return any(prefix in value for prefix in ('$Target/', '$Config/', '$Data/'))
+    
+    @staticmethod
+    def _sanitize_perf_field(value: str, fallback: str = "*") -> tuple[str, bool]:
+        """Sanitize a performance counter field for KQL generation.
+        
+        Returns (sanitized_value, was_scom_expression) tuple.
+        If the value contains SCOM runtime expressions, returns the fallback.
+        """
+        if not value:
+            return fallback, False
+        if AzureMonitorMapper._is_scom_expression(value):
+            return fallback, True
+        return value, False
+
     def _generate_perf_kql(self, data_source: SCOMDataSource) -> str:
         """Generate KQL query for performance counter data."""
-        obj = data_source.performance_object or "*"
-        counter = data_source.performance_counter or "*"
-        instance = data_source.performance_instance or "*"
+        obj, obj_expr = self._sanitize_perf_field(data_source.performance_object)
+        counter, counter_expr = self._sanitize_perf_field(data_source.performance_counter)
+        instance, instance_expr = self._sanitize_perf_field(data_source.performance_instance)
         
-        return f"""Perf
-| where ObjectName == "{obj}"
-| where CounterName == "{counter}"
-| where InstanceName == "{instance}"
-| summarize AggregatedValue = avg(CounterValue) by bin(TimeGenerated, 5m), Computer
-| where AggregatedValue > 90  // Adjust threshold as needed
-"""
+        # Build instance filter - use wildcard matching when SCOM expression was detected
+        has_scom_expr = obj_expr or counter_expr or instance_expr
+        
+        lines = ["Perf"]
+        
+        if obj != "*":
+            lines.append(f'| where ObjectName == "{obj}"')
+        if counter != "*":
+            lines.append(f'| where CounterName == "{counter}"')
+        
+        # Instance filtering: skip when wildcard (all instances)
+        if instance != "*":
+            lines.append(f'| where InstanceName == "{instance}"')
+        else:
+            # Exclude _Total when monitoring all instances to avoid double-counting
+            lines.append('| where InstanceName != "_Total"  // Remove to include _Total')
+        
+        lines.append('| summarize AggregatedValue = avg(CounterValue) by bin(TimeGenerated, 5m), Computer, InstanceName')
+        lines.append('| where AggregatedValue > 90  // Adjust threshold as needed')
+        
+        query = "\n".join(lines)
+        
+        # Add comment about SCOM expressions that were replaced
+        if has_scom_expr:
+            # Describe the original expression without embedding raw SCOM syntax
+            # (raw expressions contain nested quotes and special chars that can break KQL/JSON)
+            original_instance = data_source.performance_instance or ""
+            # Extract just the meaningful type reference for the comment
+            instance_desc = "dynamic instance reference"
+            if "LogicalDevice" in original_instance:
+                instance_desc = "LogicalDisk DeviceID (e.g. C:, D:)"
+            elif "PhysicalDisk" in original_instance:
+                instance_desc = "PhysicalDisk PerfmonInstance (e.g. 0 C:)"
+            elif "LogicalProcessor" in original_instance or "Processor" in original_instance:
+                instance_desc = "Processor instance (e.g. 0, 1, _Total)"
+            elif "NetworkAdapter" in original_instance:
+                instance_desc = "Network adapter instance"
+            comment = (
+                f"// NOTE: Original SCOM monitor targeted a specific instance via runtime expression.\n"
+                f"// Instance type: {instance_desc}\n"
+                f"// The query below monitors ALL instances. To target specific ones, add a filter:\n"
+                f"// Example: | where InstanceName == \"C:\"\n"
+            )
+            query = comment + query
+        
+        return query
     
     def _generate_event_kql(self, data_source: SCOMDataSource) -> str:
         """Generate KQL query for Windows event data."""
         log = data_source.event_log or "System"
+        
+        # Sanitize SCOM expressions from event fields
+        if self._is_scom_expression(log):
+            log = "System"  # Safe default
         
         query = f'Event\n| where EventLog == "{log}"'
         
@@ -1331,7 +1403,9 @@ CustomLog_CL
             query += f"\n| where EventID == {data_source.event_id}"
         
         if data_source.event_source:
-            query += f'\n| where Source == "{data_source.event_source}"'
+            source = data_source.event_source
+            if not self._is_scom_expression(source):
+                query += f'\n| where Source == "{source}"'
         
         query += "\n| project TimeGenerated, Computer, EventID, Source, RenderedDescription"
         
@@ -1340,6 +1414,10 @@ CustomLog_CL
     def _generate_wmi_kql(self, data_source: SCOMDataSource) -> str:
         """Generate KQL query approximation for WMI data."""
         wmi_query = data_source.wmi_query or "SELECT * FROM Win32_ComputerSystem"
+        
+        # Sanitize SCOM expressions from WMI query (used in comment only, but keep clean)
+        if self._is_scom_expression(wmi_query):
+            wmi_query = "(SCOM runtime WMI query - review original MP for details)"
         
         return f"""// Original WMI Query: {wmi_query}
 // WMI data collected via Azure Monitor Agent custom data source
