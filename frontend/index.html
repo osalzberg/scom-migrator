@@ -9,133 +9,284 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
+        /* ===== DESIGN TOKENS ===== */
         :root {
-            --azure-blue: #0078d4;
-            --azure-dark: #004578;
-            --azure-light: #50a0e0;
-            --success-green: #107c10;
-            --warning-orange: #ff8c00;
-            --error-red: #e81123;
-            --microsoft-gray: #f3f2f1;
-            --dark-gray: #323130;
-            --light-gray: #faf9f8;
-            --border-gray: #edebe9;
-            --text-gray: #605e5c;
-            --gradient-1: linear-gradient(135deg, #0078d4 0%, #004578 100%);
-            --gradient-accent: linear-gradient(135deg, #50a0e0 0%, #0078d4 100%);
-            --card-shadow: 0 4px 12px rgba(0,0,0,0.08);
-            --hover-shadow: 0 8px 24px rgba(0,0,0,0.12);
+            /* Primary palette */
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
+            --primary-light: #eff6ff;
+            --primary-muted: #93c5fd;
+            
+            /* Semantic colors */
+            --success: #059669;
+            --success-light: #ecfdf5;
+            --success-border: #a7f3d0;
+            --warning: #d97706;
+            --warning-light: #fffbeb;
+            --warning-border: #fde68a;
+            --danger: #dc2626;
+            --danger-light: #fef2f2;
+            --danger-border: #fecaca;
+            --info: #0891b2;
+            --info-light: #ecfeff;
+            
+            /* Neutrals */
+            --gray-50: #f9fafb;
+            --gray-100: #f3f4f6;
+            --gray-200: #e5e7eb;
+            --gray-300: #d1d5db;
+            --gray-400: #9ca3af;
+            --gray-500: #6b7280;
+            --gray-600: #4b5563;
+            --gray-700: #374151;
+            --gray-800: #1f2937;
+            --gray-900: #111827;
+            
+            /* Surfaces */
+            --bg-page: #f8fafc;
+            --bg-card: #ffffff;
+            --bg-elevated: #ffffff;
+            --border-default: #e5e7eb;
+            --border-subtle: #f3f4f6;
+            
+            /* Shadows */
+            --shadow-xs: 0 1px 2px rgba(0,0,0,0.05);
+            --shadow-sm: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+            --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.07), 0 2px 4px -2px rgba(0,0,0,0.05);
+            --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.08), 0 4px 6px -4px rgba(0,0,0,0.04);
+            --shadow-xl: 0 20px 25px -5px rgba(0,0,0,0.08), 0 8px 10px -6px rgba(0,0,0,0.04);
+            
+            /* Spacing (8px scale) */
+            --sp-1: 4px;
+            --sp-2: 8px;
+            --sp-3: 12px;
+            --sp-4: 16px;
+            --sp-5: 20px;
+            --sp-6: 24px;
+            --sp-8: 32px;
+            --sp-10: 40px;
+            --sp-12: 48px;
+            --sp-16: 64px;
+            
+            /* Radius */
+            --radius-sm: 6px;
+            --radius-md: 8px;
+            --radius-lg: 12px;
+            --radius-xl: 16px;
+            --radius-full: 9999px;
+            
+            /* Typography */
+            --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            --font-mono: 'SF Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
         }
         
-        * {
-            font-family: 'Segoe UI', 'Inter', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
-        }
+        *, *::before, *::after { box-sizing: border-box; }
         
         body {
-            background: #f3f2f1;
+            font-family: var(--font-sans);
+            background: var(--bg-page);
+            color: var(--gray-800);
             min-height: 100vh;
-            background-attachment: fixed;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            line-height: 1.6;
+            font-size: 14px;
         }
         
+        /* ===== TOP NAV BAR ===== */
+        .top-bar {
+            background: var(--bg-card);
+            border-bottom: 1px solid var(--border-default);
+            padding: var(--sp-4) 0;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            backdrop-filter: blur(12px);
+            background: rgba(255,255,255,0.92);
+        }
+        
+        .top-bar-inner {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 0 var(--sp-6);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .top-bar .brand {
+            display: flex;
+            align-items: center;
+            gap: var(--sp-3);
+            text-decoration: none;
+            color: var(--gray-900);
+        }
+        
+        .top-bar .brand-icon {
+            width: 32px;
+            height: 32px;
+            background: var(--primary);
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 16px;
+        }
+        
+        .top-bar .brand-text {
+            font-weight: 600;
+            font-size: 15px;
+            letter-spacing: -0.01em;
+        }
+        
+        .top-bar .brand-badge {
+            font-size: 10px;
+            font-weight: 500;
+            color: var(--gray-500);
+            background: var(--gray-100);
+            padding: 2px 8px;
+            border-radius: var(--radius-full);
+            letter-spacing: 0.02em;
+        }
+        
+        /* ===== MAIN LAYOUT ===== */
         .main-container {
-            padding: 2rem 0;
-            animation: fadeIn 0.6s ease-in;
+            max-width: 960px;
+            margin: 0 auto;
+            padding: var(--sp-10) var(--sp-6) var(--sp-16);
+            animation: fadeIn 0.4s ease-out;
         }
         
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
+            from { opacity: 0; transform: translateY(8px); }
             to { opacity: 1; transform: translateY(0); }
         }
         
+        /* ===== CARDS ===== */
         .card {
-            border: none;
-            border-radius: 20px;
-            box-shadow: var(--card-shadow);
-            backdrop-filter: blur(10px);
-            transition: all 0.3s ease;
+            background: var(--bg-card);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-sm);
+            transition: box-shadow 0.2s ease;
         }
         
         .card:hover {
-            box-shadow: var(--hover-shadow);
+            box-shadow: var(--shadow-md);
         }
         
         .card-header {
-            background: linear-gradient(135deg, var(--azure-blue), var(--azure-dark));
-            color: white;
-            border-radius: 20px 20px 0 0 !important;
-            padding: 2rem;
-            border: none;
+            background: transparent;
+            border-bottom: 1px solid var(--border-default);
+            padding: var(--sp-5) var(--sp-6);
+            border-radius: var(--radius-lg) var(--radius-lg) 0 0 !important;
+            color: var(--gray-800);
         }
         
         .card-header h4 {
             font-weight: 600;
             margin: 0;
+            font-size: 16px;
         }
         
+        .card-header h6 {
+            font-weight: 600;
+            margin: 0;
+            font-size: 14px;
+            color: var(--gray-700);
+        }
+        
+        .card-body {
+            padding: var(--sp-6);
+        }
+        
+        /* ===== PAGE HEADER ===== */
+        .page-header {
+            text-align: center;
+            margin-bottom: var(--sp-10);
+        }
+        
+        .page-header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--gray-900);
+            letter-spacing: -0.02em;
+            margin-bottom: var(--sp-2);
+        }
+        
+        .page-header p {
+            color: var(--gray-500);
+            font-size: 15px;
+            margin: 0;
+        }
+        
+        /* ===== UPLOAD ZONE ===== */
         .upload-zone {
-            border: 3px dashed #cbd5e0;
-            border-radius: 15px;
-            padding: 4rem 2rem;
+            border: 2px dashed var(--gray-300);
+            border-radius: var(--radius-xl);
+            padding: var(--sp-16) var(--sp-8);
             text-align: center;
             cursor: pointer;
-            transition: all 0.3s ease;
-            background: linear-gradient(135deg, #f7fafc 0%, #edf2f7 100%);
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .upload-zone::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(0,120,212,0.1), transparent);
-            transition: left 0.5s ease;
-        }
-        
-        .upload-zone:hover::before {
-            left: 100%;
+            transition: all 0.2s ease;
+            background: var(--gray-50);
         }
         
         .upload-zone:hover, .upload-zone.dragover {
-            border-color: var(--azure-blue);
-            background: linear-gradient(135deg, #e6f3ff 0%, #cce5ff 100%);
-            transform: scale(1.02);
+            border-color: var(--primary);
+            background: var(--primary-light);
         }
         
         .upload-zone.dragover {
             border-style: solid;
-            box-shadow: 0 0 30px rgba(0,120,212,0.3);
+            box-shadow: 0 0 0 4px rgba(37,99,235,0.1);
         }
         
-        .upload-zone i {
-            font-size: 5rem;
-            color: var(--azure-blue);
-            animation: bounce 2s infinite;
+        .upload-zone .upload-icon {
+            width: 64px;
+            height: 64px;
+            margin: 0 auto var(--sp-6);
+            background: var(--primary-light);
+            border-radius: var(--radius-xl);
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
         
-        @keyframes bounce {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-10px); }
+        .upload-zone .upload-icon i {
+            font-size: 28px;
+            color: var(--primary);
         }
         
+        .upload-zone h5 {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--gray-800);
+            margin-bottom: var(--sp-1);
+        }
+        
+        .upload-zone p {
+            color: var(--gray-500);
+            font-size: 13px;
+        }
+        
+        /* ===== BUTTONS ===== */
         .btn-azure {
-            background: linear-gradient(135deg, var(--azure-blue), var(--azure-light));
+            background: var(--primary);
             border: none;
             color: white;
             font-weight: 500;
-            padding: 0.75rem 2rem;
-            border-radius: 10px;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 15px rgba(0,120,212,0.3);
+            padding: var(--sp-3) var(--sp-6);
+            border-radius: var(--radius-md);
+            transition: all 0.15s ease;
+            font-size: 14px;
+            cursor: pointer;
         }
         
         .btn-azure:hover {
-            background: linear-gradient(135deg, var(--azure-dark), var(--azure-blue));
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(0,120,212,0.4);
+            background: var(--primary-hover);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(37,99,235,0.25);
             color: white;
         }
         
@@ -143,326 +294,483 @@
             transform: translateY(0);
         }
         
+        .btn-azure.btn-lg {
+            padding: var(--sp-4) var(--sp-8);
+            font-size: 15px;
+        }
+        
+        .btn-azure:disabled, .btn-azure[disabled] {
+            background: var(--gray-300);
+            color: var(--gray-500);
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        /* Override Bootstrap buttons for consistency */
+        .btn-success {
+            background: var(--success) !important;
+            border-color: var(--success) !important;
+            border-radius: var(--radius-md);
+            font-weight: 500;
+        }
+        .btn-success:hover {
+            background: #047857 !important;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(5,150,105,0.25);
+        }
+        
+        .btn-primary {
+            background: var(--primary) !important;
+            border-color: var(--primary) !important;
+            border-radius: var(--radius-md);
+            font-weight: 500;
+        }
+        .btn-primary:hover {
+            background: var(--primary-hover) !important;
+        }
+        
+        .btn-outline-secondary {
+            border-color: var(--gray-300);
+            color: var(--gray-600);
+            border-radius: var(--radius-md);
+            font-weight: 500;
+        }
+        .btn-outline-secondary:hover {
+            background: var(--gray-100);
+            border-color: var(--gray-400);
+            color: var(--gray-700);
+        }
+        
+        .btn-outline-primary {
+            border-color: var(--primary);
+            color: var(--primary);
+            border-radius: var(--radius-md);
+            font-weight: 500;
+        }
+        .btn-outline-primary:hover {
+            background: var(--primary);
+            border-color: var(--primary);
+            color: white;
+            transform: translateY(-1px);
+        }
+        
+        /* ===== RESULTS ===== */
         .result-section {
             display: none;
-            animation: slideIn 0.5s ease;
+            animation: slideIn 0.35s ease-out;
         }
         
         @keyframes slideIn {
-            from { opacity: 0; transform: translateX(-30px); }
-            to { opacity: 1; transform: translateX(0); }
+            from { opacity: 0; transform: translateY(12px); }
+            to { opacity: 1; transform: translateY(0); }
         }
         
+        /* ===== STAT CARDS ===== */
         .stat-card {
-            background: linear-gradient(135deg, #ffffff 0%, #f7fafc 100%);
-            border-radius: 15px;
-            padding: 2rem;
+            background: var(--bg-card);
+            border-radius: var(--radius-lg);
+            padding: var(--sp-6) var(--sp-5);
             text-align: center;
-            transition: all 0.3s ease;
-            border: 1px solid #e2e8f0;
+            transition: all 0.2s ease;
+            border: 1px solid var(--border-default);
             position: relative;
-            overflow: hidden;
-        }
-        
-        .stat-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 4px;
-            background: var(--gradient-1);
         }
         
         .stat-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            box-shadow: var(--shadow-md);
+            transform: translateY(-2px);
         }
         
+        .stat-card .stat-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: var(--radius-md);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: var(--sp-3);
+            font-size: 18px;
+        }
+        
+        .stat-card .stat-icon.blue   { background: var(--primary-light); color: var(--primary); }
+        .stat-card .stat-icon.green  { background: var(--success-light); color: var(--success); }
+        .stat-card .stat-icon.orange { background: var(--warning-light); color: var(--warning); }
+        
         .stat-card h3 {
-            font-size: 3rem;
+            font-size: 36px;
             font-weight: 700;
-            color: var(--azure-dark);
-            margin: 0;
-            background: var(--gradient-1);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+            margin: 0 0 var(--sp-1);
+            letter-spacing: -0.02em;
+            line-height: 1;
         }
         
         .stat-card small {
-            color: #64748b;
+            color: var(--gray-500);
             font-weight: 500;
+            font-size: 12px;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
-            font-size: 0.75rem;
+            letter-spacing: 0.04em;
         }
         
-        .complexity-simple { color: #107c10; }
-        .complexity-moderate { color: #ff8c00; }
-        .complexity-complex { color: #e81123; }
-        .complexity-manual { color: #8b5cf6; }
+        .complexity-simple { color: var(--success); }
+        .complexity-moderate { color: var(--warning); }
+        .complexity-complex { color: var(--danger); }
+        .complexity-manual { color: var(--gray-500); }
         
+        /* ===== MAPPING CARDS ===== */
         .mapping-card {
-            border-left: 4px solid var(--azure-blue);
-            margin-bottom: 1rem;
-            transition: all 0.3s ease;
-            border-radius: 10px;
+            border: 1px solid var(--border-default);
+            border-left: 3px solid var(--primary);
+            margin-bottom: var(--sp-3);
+            transition: all 0.15s ease;
+            border-radius: var(--radius-md);
             overflow: hidden;
         }
         
         .mapping-card:hover {
-            transform: translateX(8px);
-            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            box-shadow: var(--shadow-sm);
+            border-left-color: var(--primary-hover);
         }
         
+        /* ===== KQL CODE BLOCKS ===== */
         .kql-code {
-            background: #1e1e1e;
-            color: #d4d4d4;
-            padding: 1.5rem;
-            border-radius: 10px;
-            font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
-            font-size: 0.875rem;
+            background: var(--gray-900);
+            color: #e5e7eb;
+            padding: var(--sp-5);
+            border-radius: var(--radius-md);
+            font-family: var(--font-mono);
+            font-size: 13px;
             overflow-x: auto;
-            box-shadow: inset 0 2px 10px rgba(0,0,0,0.3);
+            border: 1px solid var(--gray-700);
         }
         
-        .loading {
-            display: none;
-        }
+        /* ===== LOADING ===== */
+        .loading { display: none; }
         
         .spinner-border {
-            width: 4rem;
-            height: 4rem;
-            border-width: 0.4rem;
+            width: 48px;
+            height: 48px;
+            border-width: 3px;
+            color: var(--primary) !important;
         }
         
+        /* ===== BADGES ===== */
         .badge-target {
-            font-size: 0.75rem;
-            padding: 0.4rem 0.8rem;
-            border-radius: 8px;
+            font-size: 11px;
+            padding: 4px 10px;
+            border-radius: var(--radius-full);
             font-weight: 500;
         }
         
-        .prereq-list {
-            list-style: none;
-            padding: 0;
-        }
-        
+        /* ===== PREREQ LIST ===== */
         .prereq-list li {
-            padding: 0.75rem 0;
-            border-bottom: 1px solid #e2e8f0;
-            transition: all 0.2s ease;
+            padding: var(--sp-3) 0;
+            border-bottom: 1px solid var(--border-subtle);
             display: flex;
             align-items: center;
+            font-size: 13px;
+            color: var(--gray-600);
         }
         
-        .prereq-list li:hover {
-            padding-left: 10px;
-            background: #f7fafc;
-        }
+        .prereq-list li:last-child { border-bottom: none; }
         
-        .prereq-list li:before {
-            content: "✓";
-            color: var(--success-green);
-            margin-right: 0.75rem;
-            font-weight: bold;
-            font-size: 1.2rem;
-        }
+        #fileInput { display: none; }
+        label[for="fileInput"] { cursor: pointer; }
         
-        #fileInput {
-            display: none;
-        }
-        
-        label[for="fileInput"] {
-            cursor: pointer;
-        }
-        
+        /* ===== ALERT BLOCKS ===== */
         .alert-info {
-            background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
-            border: none;
-            border-left: 4px solid #0ea5e9;
-            border-radius: 10px;
+            background: var(--info-light);
+            border: 1px solid #a5f3fc;
+            border-left: 3px solid var(--info);
+            border-radius: var(--radius-md);
+            color: var(--gray-700);
+            font-size: 13px;
         }
         
-        .card-header.bg-light {
-            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%) !important;
-            color: #1e293b;
-            font-weight: 600;
+        .alert-success {
+            background: var(--success-light);
+            border: 1px solid var(--success-border);
+            border-left: 3px solid var(--success);
+            border-radius: var(--radius-md);
+            color: var(--gray-700);
+            font-size: 13px;
         }
         
+        .alert-warning {
+            background: var(--warning-light) !important;
+            border: 1px solid var(--warning-border) !important;
+            border-left: 3px solid var(--warning) !important;
+            border-radius: var(--radius-md) !important;
+            color: var(--gray-700);
+            font-size: 13px;
+        }
+        
+        .alert-danger {
+            background: var(--danger-light);
+            border: 1px solid var(--danger-border);
+            border-left: 3px solid var(--danger);
+            border-radius: var(--radius-md);
+            color: var(--gray-700);
+            font-size: 13px;
+        }
+        
+        /* ===== SECTION CARDS (Easy / Manual) ===== */
         .card.border-success {
-            border: 2px solid var(--success-green) !important;
+            border: 1px solid var(--success-border) !important;
         }
-        
         .card.border-success .card-header {
-            background: linear-gradient(135deg, #107c10, #0b5c0b) !important;
+            background: var(--success-light) !important;
+            color: var(--gray-800) !important;
+            border-bottom: 1px solid var(--success-border);
         }
         
         .card.border-warning {
-            border: 2px solid var(--warning-orange) !important;
+            border: 1px solid var(--warning-border) !important;
         }
-        
         .card.border-warning .card-header {
-            background: linear-gradient(135deg, #ff8c00, #cc7000) !important;
+            background: var(--warning-light) !important;
+            color: var(--gray-800) !important;
+            border-bottom: 1px solid var(--warning-border);
         }
         
-        .btn-outline-primary {
-            border-color: var(--azure-blue);
-            color: var(--azure-blue);
-            transition: all 0.3s ease;
+        .card.border-danger {
+            border: 1px solid var(--danger-border) !important;
+        }
+        .card.border-danger .card-header {
+            background: var(--danger-light) !important;
+            color: var(--gray-800) !important;
+            border-bottom: 1px solid var(--danger-border);
         }
         
-        .btn-outline-primary:hover {
-            background: var(--azure-blue);
-            border-color: var(--azure-blue);
-            color: white;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 15px rgba(0,120,212,0.3);
+        .card-header.bg-light {
+            background: var(--gray-50) !important;
+            color: var(--gray-700);
         }
         
+        /* ===== PROGRESS BAR ===== */
+        .progress {
+            background: var(--gray-100);
+            border-radius: var(--radius-full);
+            overflow: hidden;
+            border: 1px solid var(--border-default);
+        }
+        
+        .progress-bar {
+            border-radius: var(--radius-full);
+            transition: width 0.8s ease;
+        }
+        
+        .progress-bar.bg-success { background: var(--success) !important; }
+        .progress-bar.bg-warning { background: var(--warning) !important; }
+        .progress-bar.bg-danger  { background: var(--danger) !important; }
+        
+        /* ===== DETAILS / SUMMARY ===== */
         details summary {
             cursor: pointer;
             user-select: none;
-            padding: 0.5rem;
-            border-radius: 5px;
-            transition: background 0.2s ease;
+            padding: var(--sp-2);
+            border-radius: var(--radius-sm);
+            transition: background 0.15s ease;
+            font-size: 13px;
         }
         
-        details summary:hover {
-            background: #f1f5f9;
-        }
+        details summary:hover { background: var(--gray-50); }
+        details[open] summary { margin-bottom: var(--sp-2); font-weight: 600; }
         
-        details[open] summary {
-            margin-bottom: 0.5rem;
-            font-weight: 600;
-        }
-        
-        .progress-bar-animated {
-            animation: progress-bar-stripes 1s linear infinite;
-        }
-        
-        @keyframes progress-bar-stripes {
-            0% { background-position: 0 0; }
-            100% { background-position: 40px 0; }
+        /* ===== FOOTER ===== */
+        .footer-section {
+            margin-top: var(--sp-12);
+            padding-top: var(--sp-8);
+            border-top: 1px solid var(--border-default);
+            text-align: center;
         }
         
         .footer-text {
             text-align: center;
-            margin-top: 2rem;
-            color: white;
-            opacity: 0.85;
-            font-size: 0.875rem;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            color: var(--gray-500);
+            font-size: 13px;
         }
         
+        .footer-links .btn {
+            font-size: 12px;
+            border-radius: var(--radius-full);
+        }
+        
+        /* ===== BTN GROUP FILTERS ===== */
         .btn-group .btn {
-            border-radius: 8px;
+            border-radius: var(--radius-md);
             margin: 0 2px;
-            transition: all 0.2s ease;
+            font-size: 12px;
+            font-weight: 500;
         }
         
         .btn-group .btn.active {
-            background: var(--azure-blue);
+            background: var(--primary);
             color: white;
-            box-shadow: 0 2px 8px rgba(0,120,212,0.3);
+            border-color: var(--primary);
         }
         
-        @media (max-width: 768px) {
-            .stat-card h3 {
-                font-size: 2rem;
-            }
-            
-            .upload-zone {
-                padding: 2rem 1rem;
-            }
-            
-            .upload-zone i {
-                font-size: 3rem;
-            }
-        }
-        
-        /* Floating Download Button */
+        /* ===== FLOATING DOWNLOAD ===== */
         .floating-download-btn {
             position: fixed;
-            top: 20px;
-            right: 20px;
+            top: var(--sp-5);
+            right: var(--sp-5);
             z-index: 1050;
             display: none;
-            animation: slideInRight 0.4s ease-out;
-            box-shadow: 0 4px 20px rgba(0, 120, 212, 0.4);
-            border-radius: 50px;
-            padding: 12px 24px;
+            animation: slideInRight 0.3s ease-out;
+            box-shadow: var(--shadow-lg);
+            border-radius: var(--radius-full);
+            padding: var(--sp-3) var(--sp-6);
             font-weight: 600;
+            font-size: 13px;
         }
         
         .floating-download-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 25px rgba(0, 120, 212, 0.5);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-xl);
         }
         
         @keyframes slideInRight {
-            from {
-                opacity: 0;
-                transform: translateX(50px);
-            }
-            to {
-                opacity: 1;
-                transform: translateX(0);
-            }
+            from { opacity: 0; transform: translateX(20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        
+        /* ===== ACCORDION ===== */
+        .accordion-item {
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-md) !important;
+            margin-bottom: var(--sp-2);
+            overflow: hidden;
+        }
+        
+        .accordion-button {
+            font-size: 13px;
+            font-weight: 500;
+            padding: var(--sp-4);
+        }
+        
+        .accordion-button:not(.collapsed) {
+            background: var(--gray-50);
+            color: var(--gray-800);
+            box-shadow: none;
+        }
+        
+        .accordion-button:focus {
+            box-shadow: none;
+            border-color: var(--primary);
+        }
+        
+        /* ===== DOWNLOAD GRID ===== */
+        .download-grid .btn {
+            border-radius: var(--radius-md);
+            font-size: 12px;
+            transition: all 0.15s ease;
+        }
+        
+        .download-grid .btn:hover {
+            transform: translateY(-1px);
+        }
+        
+        .download-grid .badge {
+            font-size: 10px;
+            font-weight: 500;
+        }
+        
+        /* ===== AUTHOR CARD ===== */
+        .author-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-lg);
+        }
+        
+        /* ===== DISCLAIMER ===== */
+        .disclaimer-block {
+            background: var(--gray-50);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-md);
+            padding: var(--sp-5);
+            margin-bottom: var(--sp-8);
+        }
+        
+        .disclaimer-block p {
+            font-size: 11px;
+            color: var(--gray-500);
+            line-height: 1.5;
+        }
+        
+        /* ===== RESPONSIVE ===== */
+        @media (max-width: 768px) {
+            .stat-card h3 { font-size: 28px; }
+            .upload-zone { padding: var(--sp-10) var(--sp-4); }
+            .main-container { padding: var(--sp-6) var(--sp-4) var(--sp-12); }
+            .top-bar .brand-badge { display: none; }
         }
     </style>
 </head>
 <body>
+    <!-- Top Navigation Bar -->
+    <nav class="top-bar">
+        <div class="top-bar-inner">
+            <a class="brand" href="#">
+                <div class="brand-icon"><i class="bi bi-cloud-arrow-up"></i></div>
+                <span class="brand-text">SCOM Migrator</span>
+                <span class="brand-badge">v1.16.0</span>
+            </a>
+            <div>
+                <a href="https://github.com/osalzberg/scom-migrator" target="_blank" class="btn btn-sm btn-outline-secondary">
+                    <i class="bi bi-github me-1"></i>GitHub
+                </a>
+            </div>
+        </div>
+    </nav>
+    
     <!-- Floating Download Button (shown after analysis) -->
     <button class="btn btn-success floating-download-btn" id="floatingDownloadBtn" onclick="scrollToDownload()">
         <i class="bi bi-download me-2"></i>Jump to Download
     </button>
     
-    <div class="container main-container">
-        <div class="row justify-content-center">
-            <div class="col-lg-10">
-                <div class="card">
-                    <div class="card-header">
-                        <div class="d-flex align-items-center">
-                            <i class="bi bi-cloud-arrow-up me-3" style="font-size: 2.5rem;"></i>
-                            <div>
-                                <h4 class="mb-1">SCOM to Azure Monitor Migration Tool</h4>
-                                <small class="opacity-85">Upload a Management Pack to analyze and generate migration artifacts</small>
-                            </div>
+    <div class="main-container">
+        <!-- Page Header -->
+        <div class="page-header">
+            <h1>SCOM to Azure Monitor</h1>
+            <p>Upload a Management Pack to analyze and generate migration artifacts</p>
+        </div>
+        
+        <div class="card">
+            <div class="card-body">
+                <!-- Upload Section -->
+                <div id="uploadSection">
+                    <div class="upload-zone" id="dropZone">
+                        <div class="upload-icon">
+                            <i class="bi bi-file-earmark-arrow-up"></i>
+                        </div>
+                        <h5>Drop Management Pack Here</h5>
+                        <p class="mb-4">or click to browse files</p>
+                        <label for="fileInput" class="btn btn-azure">
+                            <i class="bi bi-folder2-open me-2"></i>Browse Files
+                        </label>
+                        <p class="mt-4 mb-0" style="font-size: 12px; color: var(--gray-400);">
+                            <i class="bi bi-info-circle me-1"></i>
+                            Supports .xml Management Pack files (max 50MB)
+                        </p>
+                    </div>
+                    <input type="file" id="fileInput" accept=".xml" onchange="handleFileSelect(event)">
+                    
+                    <div class="mt-3" id="selectedFile" style="display: none;">
+                        <div class="alert alert-info d-flex align-items-center">
+                            <i class="bi bi-file-earmark-code me-2 fs-5"></i>
+                            <span id="fileName" class="flex-grow-1"></span>
+                            <button type="button" class="btn-close" onclick="clearFile()"></button>
                         </div>
                     </div>
-                    <div class="card-body p-4">
-                        <!-- Upload Section -->
-                        <div id="uploadSection">
-                            <div class="upload-zone" id="dropZone">
-                                <i class="bi bi-file-earmark-arrow-up mb-3"></i>
-                                <h5 class="mt-3 mb-2">Drop Management Pack Here</h5>
-                                <p class="text-muted mb-4">or click the button below</p>
-                                <label for="fileInput" class="btn btn-azure btn-lg">
-                                    <i class="bi bi-folder2-open me-2"></i>Browse Files
-                                </label>
-                                <p class="small text-muted mt-4 mb-0">
-                                    <i class="bi bi-info-circle me-1"></i>
-                                    Supports .xml Management Pack files (max 50MB)
-                                </p>
-                            </div>
-                            <input type="file" id="fileInput" accept=".xml" onchange="handleFileSelect(event)">
-                            
-                            <div class="mt-3" id="selectedFile" style="display: none;">
-                                <div class="alert alert-info d-flex align-items-center">
-                                    <i class="bi bi-file-earmark-code me-2 fs-4"></i>
-                                    <span id="fileName" class="flex-grow-1"></span>
-                                    <button type="button" class="btn-close" onclick="clearFile()"></button>
-                                </div>
-                            </div>
-                            
-                            <div class="d-grid gap-2 mt-4">
-                                <button class="btn btn-azure btn-lg" id="analyzeBtn" onclick="analyzeFile()" disabled>
-                                    <i class="bi bi-search me-2"></i>Analyze Management Pack
-                                </button>
-                            </div>
-                        </div>
+                    
+                    <div class="d-grid gap-2 mt-4">
+                        <button class="btn btn-azure btn-lg" id="analyzeBtn" onclick="analyzeFile()" disabled>
+                            <i class="bi bi-search me-2"></i>Analyze Management Pack
+                        </button>
+                    </div>
+                </div>
                         
                         <!-- Loading Section -->
                         <div class="loading text-center py-5" id="loadingSection">
@@ -509,19 +817,22 @@
                             <div class="row g-3 mb-4">
                                 <div class="col-md-4 col-sm-6">
                                     <div class="stat-card">
-                                        <h3 id="totalComponents" style="color: #0078d4;">0</h3>
+                                        <div class="stat-icon blue"><i class="bi bi-layers"></i></div>
+                                        <h3 id="totalComponents" style="color: var(--primary);">0</h3>
                                         <small>Total Components</small>
                                     </div>
                                 </div>
                                 <div class="col-md-4 col-sm-6">
                                     <div class="stat-card">
-                                        <h3 id="migratableCount" style="color: #107c10;">0</h3>
+                                        <div class="stat-icon green"><i class="bi bi-check-circle"></i></div>
+                                        <h3 id="migratableCount" style="color: var(--success);">0</h3>
                                         <small>Easily Migratable</small>
                                     </div>
                                 </div>
                                 <div class="col-md-4 col-sm-6">
                                     <div class="stat-card">
-                                        <h3 id="manualCount" style="color: #ff8c00;">0</h3>
+                                        <div class="stat-icon orange"><i class="bi bi-exclamation-triangle"></i></div>
+                                        <h3 id="manualCount" style="color: var(--warning);">0</h3>
                                         <small>Manual Review</small>
                                     </div>
                                 </div>
@@ -554,20 +865,20 @@
                             
                             <!-- Easily Migratable Components - INCLUDED IN DOWNLOAD -->
                             <div class="card mb-4 border-success" id="easyMigrationCard" style="display: none;">
-                                <div class="card-header bg-success text-white d-flex justify-content-between align-items-center" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#easyMigrationCollapse">
+                                <div class="card-header d-flex justify-content-between align-items-center" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#easyMigrationCollapse">
                                     <h6 class="mb-0">
-                                        <i class="bi bi-check-circle me-2"></i>
-                                        ✅ Auto-Migrated Components 
-                                        <span class="badge bg-white text-success ms-2" id="easyCount">0</span>
+                                        <i class="bi bi-check-circle me-2" style="color: var(--success);"></i>
+                                        Auto-Migrated Components 
+                                        <span class="badge" style="background: var(--success-light); color: var(--success);" id="easyCount">0</span>
                                     </h6>
                                     <div>
-                                        <span class="badge bg-white text-success me-2">Included in Download</span>
-                                        <i class="bi bi-chevron-down"></i>
+                                        <span class="badge" style="background: var(--success-light); color: var(--success);">Included in Download</span>
+                                        <i class="bi bi-chevron-down ms-2"></i>
                                     </div>
                                 </div>
                                 <div class="collapse show" id="easyMigrationCollapse">
                                     <div class="card-body">
-                                        <div class="alert alert-success mb-3" style="border-left: 4px solid #198754;">
+                                        <div class="alert alert-success mb-3">
                                             <i class="bi bi-info-circle me-2"></i>
                                             <strong>These components are covered by the downloaded ARM templates.</strong>
                                             Deploy the All-in-One template to set up alerts, DCRs, and workbooks for all these items.
@@ -579,20 +890,20 @@
                             
                             <!-- Components NOT Auto-Migrated -->
                             <div class="card mb-4 border-danger" id="manualReviewCard" style="display: none;">
-                                <div class="card-header bg-danger text-white d-flex justify-content-between align-items-center" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#manualReviewCollapse">
+                                <div class="card-header d-flex justify-content-between align-items-center" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#manualReviewCollapse">
                                     <h6 class="mb-0">
-                                        <i class="bi bi-exclamation-octagon me-2"></i>
-                                        ⚠️ Requires Manual Migration
-                                        <span class="badge bg-white text-danger ms-2" id="manualCount2">0</span>
+                                        <i class="bi bi-exclamation-octagon me-2" style="color: var(--danger);"></i>
+                                        Requires Manual Migration
+                                        <span class="badge" style="background: var(--danger-light); color: var(--danger);" id="manualCount2">0</span>
                                     </h6>
                                     <div>
-                                        <span class="badge bg-white text-danger me-2">NOT in Download</span>
-                                        <i class="bi bi-chevron-down"></i>
+                                        <span class="badge" style="background: var(--danger-light); color: var(--danger);">NOT in Download</span>
+                                        <i class="bi bi-chevron-down ms-2"></i>
                                     </div>
                                 </div>
                                 <div class="collapse show" id="manualReviewCollapse">
                                     <div class="card-body">
-                                        <div class="alert alert-danger mb-3" style="border-left: 4px solid #dc3545;">
+                                        <div class="alert alert-danger mb-3">
                                             <i class="bi bi-exclamation-triangle me-2"></i>
                                             <strong>These components require manual implementation.</strong>
                                             They may involve custom scripts, complex logic, or unsupported features that need human review.
@@ -635,11 +946,11 @@
                                     <h6 class="mb-0"><i class="bi bi-download me-2"></i>Download & Deploy to Azure</h6>
                                 </div>
                                 <div class="card-body">
-                                    <div class="alert alert-warning mb-3" style="background: linear-gradient(135deg, #fff3cd 0%, #ffe5a0 100%); border: 2px solid #ffc107; border-radius: 10px;">
+                                    <div class="alert alert-warning mb-3">
                                         <div class="d-flex align-items-start">
-                                            <i class="bi bi-exclamation-triangle-fill me-3 fs-4" style="color: #ff8c00;"></i>
+                                            <i class="bi bi-exclamation-triangle-fill me-3 fs-5" style="color: var(--warning);"></i>
                                             <div>
-                                                <strong>⚠️ Deploy to Azure</strong>
+                                                <strong>Deploy to Azure</strong>
                                                 <p class="mb-0 small mt-1">
                                                     Before deploying, edit the template to set your workspace name and other parameters.
                                                     <strong>Always review and test in a non-production environment first.</strong>
@@ -844,48 +1155,47 @@ New-AzResourceGroupDeployment `
                 </div>
                 
                 <!-- About the Author -->
-                <div class="card mt-4" style="background: linear-gradient(135deg, rgba(255,255,255,0.98) 0%, rgba(240,248,255,0.98) 100%);">
+                <div class="card author-card mt-4">
                     <div class="card-body p-4">
-                        <h6 class="text-primary mb-3">
-                            <i class="bi bi-person-badge me-2"></i>
+                        <h6 class="mb-3" style="color: var(--gray-500); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;">
+                            <i class="bi bi-person-badge me-1"></i>
                             About the Author
                         </h6>
-                        <div class="d-flex align-items-start">
-                            <div class="flex-grow-1">
-                                <h6 class="mb-1 fw-bold">Oren Salzberg</h6>
-                                <p class="small text-muted mb-2">
-                                    <i class="bi bi-briefcase me-1"></i>
-                                    Product Manager - Microsoft Azure Log Analytics Team
-                                </p>
-                                <p class="small mb-2">
-                                    Oren is a Product Manager in the Microsoft Azure Log Analytics team with extensive experience in IT monitoring 
-                                    and operations management. As a former SCOM Premier Field Engineer, he brings deep expertise in System Center 
-                                    Operations Manager and enterprise monitoring solutions to help organizations optimize their IT infrastructure.
-                                </p>
-                                <p class="small mb-0">
-                                    <i class="bi bi-linkedin me-1" style="color: #0077b5;"></i>
-                                    <a href="https://www.linkedin.com/in/oren-salzberg-4b827b57/" target="_blank" rel="noopener noreferrer" 
-                                       class="text-decoration-none" style="color: #0077b5;">
-                                        Connect on LinkedIn
-                                    </a>
-                                </p>
-                            </div>
+                        <div>
+                            <h6 class="mb-1 fw-bold" style="font-size: 15px;">Oren Salzberg</h6>
+                            <p class="small mb-2" style="color: var(--gray-500);">
+                                Product Manager — Microsoft Azure Log Analytics Team
+                            </p>
+                            <p class="small mb-2" style="color: var(--gray-600); line-height: 1.6;">
+                                Oren is a Product Manager in the Microsoft Azure Log Analytics team with extensive experience in IT monitoring 
+                                and operations management. As a former SCOM Premier Field Engineer, he brings deep expertise in System Center 
+                                Operations Manager and enterprise monitoring solutions to help organizations optimize their IT infrastructure.
+                            </p>
+                            <p class="small mb-0">
+                                <a href="https://www.linkedin.com/in/oren-salzberg-4b827b57/" target="_blank" rel="noopener noreferrer" 
+                                   class="text-decoration-none" style="color: var(--primary);">
+                                    <i class="bi bi-linkedin me-1"></i>Connect on LinkedIn
+                                </a>
+                            </p>
                         </div>
                     </div>
                 </div>
                 
-                <div class="footer-text text-center" style="margin-top: 2rem;">
-                    <p class="mb-1" style="color: #605e5c;">
-                        <i class="bi bi-shield-check me-1"></i>
-                        SCOM to Azure Monitor Migration Tool v1.16.0
-                    </p>
-                    <small style="color: #8a8886;">Community Tool • Not Officially Supported</small>
-                    <div class="mt-2">
-                        <a href="https://github.com/osalzberg/scom-migrator/issues/new/choose" target="_blank" class="btn btn-sm btn-outline-primary me-2">
+                <!-- Footer -->
+                <div class="footer-section">
+                    <div class="footer-text mb-3">
+                        <p class="mb-1">
+                            <i class="bi bi-shield-check me-1"></i>
+                            SCOM to Azure Monitor Migration Tool
+                        </p>
+                        <small style="color: var(--gray-400);">Community Tool · Not Officially Supported</small>
+                    </div>
+                    <div class="footer-links mb-4">
+                        <a href="https://github.com/osalzberg/scom-migrator/issues/new/choose" target="_blank" class="btn btn-sm btn-outline-secondary me-1">
                             <i class="bi bi-bug me-1"></i>Report Issue
                         </a>
-                        <a href="https://github.com/osalzberg/scom-migrator/discussions" target="_blank" class="btn btn-sm btn-outline-success me-2">
-                            <i class="bi bi-chat-dots me-1"></i>Feedback & Ideas
+                        <a href="https://github.com/osalzberg/scom-migrator/discussions" target="_blank" class="btn btn-sm btn-outline-secondary me-1">
+                            <i class="bi bi-chat-dots me-1"></i>Feedback
                         </a>
                         <a href="https://github.com/osalzberg/scom-migrator" target="_blank" class="btn btn-sm btn-outline-secondary">
                             <i class="bi bi-github me-1"></i>GitHub
@@ -894,24 +1204,22 @@ New-AzResourceGroupDeployment `
                 </div>
                 
                 <!-- Disclaimer -->
-                <div class="mt-3 p-3" style="background: rgba(255,255,255,0.7); border-radius: 8px; margin-bottom: 2rem;">
-                    <p class="mb-2" style="font-size: 0.7rem; color: #8a8886; line-height: 1.4;">
-                        <strong style="color: #605e5c;">Disclaimer:</strong> 
+                <div class="disclaimer-block">
+                    <p class="mb-2">
+                        <strong style="color: var(--gray-600);">Disclaimer:</strong> 
                         This web application is provided as-is for informational and educational purposes. 
                         The use of this application and any generated ARM templates, migration reports, or artifacts is at your own risk. 
                         This tool is not officially supported or endorsed by Microsoft Corporation. Microsoft Corporation assumes no 
                         responsibility or liability for the use of this tool or any content generated through it. Users are responsible 
                         for testing and validating all generated templates and configurations in their environment before production deployment.
                     </p>
-                    <p class="mb-0" style="font-size: 0.65rem; color: #a19f9d;">
+                    <p class="mb-0" style="font-size: 10px;">
                         <strong>Trademarks:</strong> Microsoft, Azure, Azure Monitor, System Center Operations Manager (SCOM), 
                         Windows, and other product names referenced are trademarks or registered trademarks of Microsoft Corporation 
                         in the United States and/or other countries.
                     </p>
                 </div>
             </div>
-        </div>
-    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
@@ -965,6 +1273,13 @@ New-AzResourceGroupDeployment `
                     handleFile(dt.files[0]);
                 }
             }, false);
+            
+            // Click anywhere on the drop zone to open file picker
+            dropZone.addEventListener('click', function(e) {
+                // Don't trigger if clicking the Browse Files button (it already opens the picker via label)
+                if (e.target.closest('label[for="fileInput"]') || e.target.closest('button')) return;
+                document.getElementById('fileInput').click();
+            });
         });
         
         function handleFileSelect(event) {
@@ -1013,7 +1328,18 @@ New-AzResourceGroupDeployment `
                 method: 'POST',
                 body: formData
             })
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(response.status === 404 
+                        ? 'API endpoint not found. Make sure the app is deployed to Azure or the API is running locally.'
+                        : 'Server returned ' + response.status + ' ' + response.statusText);
+                }
+                const contentType = response.headers.get('content-type') || '';
+                if (!contentType.includes('application/json')) {
+                    throw new Error('Server returned an unexpected response. Make sure the API is running.');
+                }
+                return response.json();
+            })
             .then(data => {
                 document.getElementById('loadingSection').style.display = 'none';
                 
@@ -1054,14 +1380,14 @@ New-AzResourceGroupDeployment `
                 }
                 
                 modal.innerHTML = `
-                    <div style="background:white;border-radius:12px;padding:32px;max-width:500px;margin:20px;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
-                        <h2 style="margin:0 0 16px 0;color:#0078d4;font-size:20px;">${title}</h2>
-                        <p style="color:#333;margin:0 0 20px 0;line-height:1.6;">
+                    <div style="background:white;border-radius:var(--radius-lg);padding:32px;max-width:500px;margin:20px;box-shadow:var(--shadow-xl);">
+                        <h2 style="margin:0 0 16px 0;color:var(--primary);font-size:20px;font-weight:600;">${title}</h2>
+                        <p style="color:var(--gray-700);margin:0 0 20px 0;line-height:1.6;">
                             This ${fileType} cannot be analyzed directly. Please export it as XML from SCOM.
                         </p>
-                        <div style="background:#f5f5f5;border-radius:8px;padding:16px;margin-bottom:20px;">
-                            <p style="margin:0 0 12px 0;font-weight:600;color:#333;">How to export:</p>
-                            <ol style="margin:0;padding-left:20px;color:#555;line-height:1.8;">
+                        <div style="background:var(--gray-50);border-radius:var(--radius-md);padding:16px;margin-bottom:20px;">
+                            <p style="margin:0 0 12px 0;font-weight:600;color:var(--gray-800);">How to export:</p>
+                            <ol style="margin:0;padding-left:20px;color:var(--gray-600);line-height:1.8;">
                                 <li>Open <strong>SCOM Console</strong></li>
                                 <li>Go to <strong>Administration → Management Packs</strong></li>
                                 <li>Right-click the MP → <strong>Export Management Pack</strong></li>
@@ -1069,7 +1395,7 @@ New-AzResourceGroupDeployment `
                             </ol>
                         </div>
                         <button onclick="this.closest('div').parentElement.remove()" 
-                            style="background:#0078d4;color:white;border:none;padding:12px 32px;border-radius:6px;cursor:pointer;font-size:14px;font-weight:500;">
+                            style="background:var(--primary);color:white;border:none;padding:12px 32px;border-radius:var(--radius-md);cursor:pointer;font-size:14px;font-weight:500;">
                             Got it
                         </button>
                     </div>
@@ -1077,8 +1403,25 @@ New-AzResourceGroupDeployment `
                 document.body.appendChild(modal);
                 modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
             } else {
-                // Generic error
-                alert('Error: ' + errorMsg);
+                // Generic error - show inline alert instead of browser alert()
+                const errorContainer = document.getElementById('uploadSection');
+                if (errorContainer) {
+                    // Remove any previous inline error
+                    const prev = errorContainer.querySelector('.inline-error');
+                    if (prev) prev.remove();
+                    
+                    const errorDiv = document.createElement('div');
+                    errorDiv.className = 'alert alert-danger d-flex align-items-start mt-3 inline-error';
+                    errorDiv.innerHTML = `
+                        <i class="bi bi-exclamation-triangle-fill me-2 mt-1" style="color: var(--danger);"></i>
+                        <div class="flex-grow-1">
+                            <strong>Analysis failed</strong>
+                            <p class="mb-0 small mt-1" style="color: var(--gray-600);">${errorMsg}</p>
+                        </div>
+                        <button type="button" class="btn-close" onclick="this.parentElement.remove()"></button>
+                    `;
+                    errorContainer.insertBefore(errorDiv, errorContainer.firstChild);
+                }
             }
         }
         
@@ -1098,14 +1441,14 @@ New-AzResourceGroupDeployment `
             }
             
             modal.innerHTML = `
-                <div style="background:white;border-radius:12px;padding:32px;max-width:500px;margin:20px;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
-                    <h2 style="margin:0 0 16px 0;color:#0078d4;font-size:20px;">${title}</h2>
-                    <p style="color:#333;margin:0 0 20px 0;line-height:1.6;">
+                <div style="background:white;border-radius:var(--radius-lg);padding:32px;max-width:500px;margin:20px;box-shadow:var(--shadow-xl);">
+                    <h2 style="margin:0 0 16px 0;color:var(--primary);font-size:20px;font-weight:600;">${title}</h2>
+                    <p style="color:var(--gray-700);margin:0 0 20px 0;line-height:1.6;">
                         ${description} Please export it as XML from SCOM.
                     </p>
-                    <div style="background:#f5f5f5;border-radius:8px;padding:16px;margin-bottom:20px;">
-                        <p style="margin:0 0 12px 0;font-weight:600;color:#333;">How to export:</p>
-                        <ol style="margin:0;padding-left:20px;color:#555;line-height:1.8;">
+                    <div style="background:var(--gray-50);border-radius:var(--radius-md);padding:16px;margin-bottom:20px;">
+                        <p style="margin:0 0 12px 0;font-weight:600;color:var(--gray-800);">How to export:</p>
+                        <ol style="margin:0;padding-left:20px;color:var(--gray-600);line-height:1.8;">
                             <li>Open <strong>SCOM Console</strong></li>
                             <li>Go to <strong>Administration → Management Packs</strong></li>
                             <li>Right-click the MP → <strong>Export Management Pack</strong></li>
@@ -1113,7 +1456,7 @@ New-AzResourceGroupDeployment `
                         </ol>
                     </div>
                     <button onclick="this.closest('div').parentElement.remove()" 
-                        style="background:#0078d4;color:white;border:none;padding:12px 32px;border-radius:6px;cursor:pointer;font-size:14px;font-weight:500;">
+                        style="background:var(--primary);color:white;border:none;padding:12px 32px;border-radius:var(--radius-md);cursor:pointer;font-size:14px;font-weight:500;">
                         Got it
                     </button>
                 </div>
@@ -1267,7 +1610,7 @@ New-AzResourceGroupDeployment `
                     ${r.implementation_notes && showDetails ? `
                         <details class="mt-2">
                             <summary class="text-muted small"><strong>📋 Implementation Steps</strong></summary>
-                            <div class="mt-2 small p-3 rounded" style="background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border-left: 4px solid #0078d4;">${formatNotes(r.implementation_notes)}</div>
+                            <div class="mt-2 small p-3 rounded" style="background: var(--gray-50); border-left: 3px solid var(--primary);">${formatNotes(r.implementation_notes)}</div>
                         </details>
                     ` : ''}
                     ${r.kql_query && showDetails ? `
