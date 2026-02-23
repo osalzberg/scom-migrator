@@ -348,17 +348,20 @@ class AzureMonitorMapper:
                         "DCR for custom log collection OR Azure Policy Guest Configuration",
                         "Log Analytics workspace",
                     ],
-                    kql_query="""// Query custom registry monitoring data
-RegistryMonitoring_CL
-| where TimeGenerated > ago(24h)
-| project TimeGenerated, Computer, RegistryKey, ValueName, ValueData
-| order by TimeGenerated desc
-
-// Alternative: Use Azure Policy Guest Configuration compliance data
-GuestConfigurationResources
-| where type == "Microsoft.GuestConfiguration/guestConfigurationAssignments/reports"
+                    kql_query="""// Registry monitoring via Azure Policy Guest Configuration
+// This uses built-in compliance data - no custom tables needed
+arg("").resources
+| where type == "microsoft.guestconfiguration/guestconfigurationassignments"
 | where properties.complianceStatus == "NonCompliant"
-| project TimeGenerated, Computer = split(id, '/')[8], ComplianceReason = properties.complianceReasons""",
+| project name, resourceGroup, complianceStatus = properties.complianceStatus
+
+// Alternative: Monitor registry changes via Windows Event Log
+// Configure auditing on the registry key, then query:
+Event
+| where TimeGenerated > ago(24h)
+| where EventLog == "Security" and EventID in (4657, 4663)
+| project TimeGenerated, Computer, EventID, RenderedDescription
+| order by TimeGenerated desc""",
                 ))
                 complexity = MigrationComplexity.SIMPLE
                 
@@ -509,11 +512,13 @@ VMProcess
 | summarize arg_max(TimeGenerated, *) by Computer, ProcessName
 | project Computer, ProcessName, DisplayName, ExecutablePath, CompanyName
 
-// Alternative: Query services via custom collection
-CustomServiceInventory_CL
+// Alternative: Query service events from Event Log
+Event
 | where TimeGenerated > ago(1d)
-| summarize arg_max(TimeGenerated, *) by ServiceName, Computer
-| project Computer, ServiceName, ServiceDisplayName, ServiceState, StartupType""",
+| where EventLog == "System" and Source == "Service Control Manager"
+| where EventID in (7036, 7040, 7045)
+| summarize arg_max(TimeGenerated, *) by Computer, EventID, RenderedDescription
+| project TimeGenerated, Computer, EventID, RenderedDescription""",
         ))
         
         limitations.append(
@@ -549,18 +554,17 @@ CustomServiceInventory_CL
     def _generate_discovery_kql(self, discovery: SCOMDiscovery) -> str:
         """Generate KQL query for discovery data."""
         if discovery.data_source and discovery.data_source.wmi_query:
-            return f"""// Custom table for WMI discovery data
+            return f"""// WMI discovery equivalent using Event Log and Perf counters
 // Original WMI: {discovery.data_source.wmi_query}
-
-CustomDiscovery_CL
-| where TimeGenerated > ago(24h)
-| project TimeGenerated, Computer, DiscoveredProperties
-| order by TimeGenerated desc
-
-// Alternative: Use Event Log for process monitoring (no Dependency Agent needed)
+// Use Event Log and Perf counters for monitoring (no custom tables needed)
 Perf
 | where TimeGenerated > ago(1h)
-| summarize by Computer, ExecutableName, DisplayName"""
+| summarize by Computer, ObjectName, CounterName
+| order by Computer asc
+
+// Alternative: Use Azure Resource Graph for resource discovery
+// Resources | where type =~ 'microsoft.compute/virtualmachines'
+"""
         
         return """// Query discovered resources
 // Use Azure Resource Graph for Azure resources:
@@ -1269,11 +1273,16 @@ Use the same targeting approaches as service monitors:
                 "Custom log DCR configured with file path pattern",
                 "Log Analytics workspace with custom log table",
             ],
-            kql_query=f"""// Query custom log table
-CustomLog_CL
+            kql_query=f"""// Custom log collection via Azure Monitor Agent DCR
+// Configure a Data Collection Rule to collect the log file, then query:
+Event
 | where TimeGenerated > ago(1h)
-| parse RawData with * // Add parsing logic based on log format
-| project TimeGenerated, Computer, ParsedFields
+| where EventLog == "Application" or EventLog == "System"
+| project TimeGenerated, Computer, EventLog, EventID, Source, RenderedDescription
+| order by TimeGenerated desc
+
+// NOTE: Once you configure a custom log DCR and the custom table is created,
+// replace the Event query above with your custom table name.
 """,
         )]
     
@@ -1412,19 +1421,86 @@ CustomLog_CL
         return query
     
     def _generate_wmi_kql(self, data_source: SCOMDataSource) -> str:
-        """Generate KQL query approximation for WMI data."""
+        """Generate KQL query approximation for WMI data.
+        
+        Uses InsightsMetrics (VM Insights) or Event tables instead of custom
+        WMIData_CL to avoid deployment failures when the custom table doesn't
+        exist yet in the workspace.
+        """
         wmi_query = data_source.wmi_query or "SELECT * FROM Win32_ComputerSystem"
         
         # Sanitize SCOM expressions from WMI query (used in comment only, but keep clean)
         if self._is_scom_expression(wmi_query):
             wmi_query = "(SCOM runtime WMI query - review original MP for details)"
         
-        return f"""// Original WMI Query: {wmi_query}
-// WMI data collected via Azure Monitor Agent custom data source
-
-WMIData_CL
+        # Determine a meaningful KQL query based on the WMI class being queried
+        wmi_lower = wmi_query.lower()
+        
+        # Map common WMI classes to their Azure Monitor equivalents
+        if "win32_logicaldisk" in wmi_lower or "win32_volume" in wmi_lower or "freediskspace" in wmi_lower.replace(" ", ""):
+            return f"""// Original WMI Query: {wmi_query}
+// Equivalent: VM Insights collects disk metrics via Azure Monitor Agent
+InsightsMetrics
 | where TimeGenerated > ago(1h)
-| project TimeGenerated, Computer, WMIProperties
+| where Namespace == "LogicalDisk" and Name == "FreeSpacePercentage"
+| project TimeGenerated, Computer, Name, Val, Tags
+| order by TimeGenerated desc
+"""
+        elif "win32_processor" in wmi_lower or "loadpercentage" in wmi_lower.replace(" ", ""):
+            return f"""// Original WMI Query: {wmi_query}
+// Equivalent: VM Insights collects CPU metrics via Azure Monitor Agent
+InsightsMetrics
+| where TimeGenerated > ago(1h)
+| where Namespace == "Processor" and Name == "UtilizationPercentage"
+| project TimeGenerated, Computer, Name, Val, Tags
+| order by TimeGenerated desc
+"""
+        elif "win32_operatingsystem" in wmi_lower or "freephysicalmemory" in wmi_lower.replace(" ", ""):
+            return f"""// Original WMI Query: {wmi_query}
+// Equivalent: VM Insights collects memory metrics via Azure Monitor Agent
+InsightsMetrics
+| where TimeGenerated > ago(1h)
+| where Namespace == "Memory" and Name == "AvailableMB"
+| project TimeGenerated, Computer, Name, Val, Tags
+| order by TimeGenerated desc
+"""
+        elif "win32_service" in wmi_lower:
+            return f"""// Original WMI Query: {wmi_query}
+// Equivalent: Monitor Windows services via Event Log (Service Control Manager)
+Event
+| where TimeGenerated > ago(1h)
+| where EventLog == "System" and Source == "Service Control Manager"
+| where EventID in (7036, 7040, 7045)
+| project TimeGenerated, Computer, EventID, RenderedDescription
+| order by TimeGenerated desc
+"""
+        elif "win32_computersystem" in wmi_lower:
+            return f"""// Original WMI Query: {wmi_query}
+// Equivalent: Heartbeat table tracks computer health and properties
+Heartbeat
+| where TimeGenerated > ago(1h)
+| summarize LastHeartbeat = max(TimeGenerated) by Computer, OSType, OSName, ComputerEnvironment
+| order by LastHeartbeat desc
+"""
+        elif "win32_ntlogevent" in wmi_lower:
+            return f"""// Original WMI Query: {wmi_query}
+// Equivalent: Event log data collected via Azure Monitor Agent
+Event
+| where TimeGenerated > ago(1h)
+| project TimeGenerated, Computer, EventLog, EventID, Source, RenderedDescription
+| order by TimeGenerated desc
+"""
+        else:
+            # Generic fallback using Event table (always exists in workspace)
+            return f"""// Original WMI Query: {wmi_query}
+// WMI monitors should be migrated to equivalent Azure Monitor data sources.
+// Options: InsightsMetrics (VM Insights), Event logs, or custom DCR.
+// The query below checks for related system events as a starting point.
+Event
+| where TimeGenerated > ago(1h)
+| where EventLog == "System" or EventLog == "Application"
+| project TimeGenerated, Computer, EventLog, EventID, Source, RenderedDescription
+| order by TimeGenerated desc
 """
     
     def _create_generic_recommendation(self, monitor: SCOMMonitor) -> AzureMonitorRecommendation:
