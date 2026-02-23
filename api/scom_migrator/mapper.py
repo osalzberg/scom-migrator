@@ -698,18 +698,135 @@ Perf
         severity: Severity,
         name: str,
     ) -> list[AzureMonitorRecommendation]:
-        """Map database/SQL-based monitoring to Azure Monitor log alerts.
+        """Map database-based monitoring to Azure Monitor log alerts.
         
-        SCOM SQL Server monitors use internal SQL queries to check DB health,
-        agent jobs, disk space, etc. In Azure Monitor, these map to
-        Log Analytics scheduled query alerts using the Event table
-        (for SQL Server events forwarded via DCR) or Azure SQL Analytics.
+        SCOM database monitors use internal queries to check DB health.
+        Detects the database engine from the type_id / name context and
+        generates engine-appropriate KQL.
         """
         type_id = data_source.type_id or ""
-        type_lower = type_id.lower()
+        context = (type_id + " " + name).lower()
         
-        # Determine the best KQL based on the SCOM data source module type
-        if "agentjob" in type_lower or "job" in type_lower:
+        kql, desc, notes, prereqs = self._build_database_kql(context, type_id, name)
+        
+        return [AzureMonitorRecommendation(
+            target_type=AzureMonitorTargetType.LOG_ALERT,
+            description=desc,
+            implementation_notes=notes,
+            complexity=MigrationComplexity.MODERATE,
+            confidence_score=0.75,
+            prerequisites=prereqs,
+            kql_query=kql,
+        )]
+    
+    def _build_database_kql(
+        self, context: str, type_id: str, name: str
+    ) -> tuple[str, str, str, list[str]]:
+        """Return (kql, description, implementation_notes, prerequisites)
+        tuned to the detected database engine."""
+        
+        # ── Detect database engine from SCOM type-id / display-name ──
+        is_sql_server = any(kw in context for kw in (
+            "sqlserver", "mssql", "sql.server", "sqlserveragent",
+            "sql server", "microsoft.sqlserver",
+        ))
+        is_oracle = any(kw in context for kw in (
+            "oracle", "ora.", "oracledb",
+        ))
+        is_mysql = any(kw in context for kw in (
+            "mysql", "my.sql", "mariadb",
+        ))
+        
+        # ── SQL Server ───────────────────────────────────────────────
+        if is_sql_server:
+            kql, desc = self._sql_server_database_kql(context, name)
+            notes = (
+                f"Original SCOM data source module: {type_id}\n\n"
+                f"This SQL Server monitor uses internal database queries in SCOM. "
+                f"In Azure Monitor, equivalent monitoring is achieved via:\n"
+                f"1. Event collection from Application log (SQL Server events)\n"
+                f"2. Performance counter collection via DCR\n"
+                f"3. Azure SQL Analytics solution for deeper SQL insights"
+            )
+            prereqs = [
+                "Configure DCR to collect Application event log from SQL Servers",
+                "Configure SQL Server performance counters in DCR",
+                "Consider enabling Azure SQL Analytics for deeper insights",
+            ]
+            return kql, desc, notes, prereqs
+        
+        # ── Oracle ───────────────────────────────────────────────────
+        if is_oracle:
+            kql = (
+                "Event\n"
+                "| where EventLog == \"Application\"\n"
+                "| where Source contains \"Oracle\"\n"
+                "| where EventLevelName in (\"Error\", \"Warning\")\n"
+                "| project TimeGenerated, Computer, EventID, Source, RenderedDescription\n"
+                "| order by TimeGenerated desc"
+            )
+            desc = f"Create log alert for Oracle database monitoring ({name})"
+            notes = (
+                f"Original SCOM data source module: {type_id}\n\n"
+                f"This Oracle monitor uses internal database queries in SCOM. "
+                f"In Azure Monitor, collect Oracle-related events via DCR "
+                f"and create scheduled query alerts."
+            )
+            prereqs = [
+                "Configure DCR to collect Application event log from Oracle servers",
+                "Consider Azure Monitor for Oracle workloads or third-party solution",
+            ]
+            return kql, desc, notes, prereqs
+        
+        # ── MySQL / MariaDB ──────────────────────────────────────────
+        if is_mysql:
+            kql = (
+                "Syslog\n"
+                "| where ProcessName contains \"mysql\" or ProcessName contains \"mariadb\"\n"
+                "| where SeverityLevel in (\"err\", \"warning\", \"crit\")\n"
+                "| project TimeGenerated, Computer, SeverityLevel, SyslogMessage\n"
+                "| order by TimeGenerated desc"
+            )
+            desc = f"Create log alert for MySQL/MariaDB monitoring ({name})"
+            notes = (
+                f"Original SCOM data source module: {type_id}\n\n"
+                f"This MySQL monitor uses internal database queries in SCOM. "
+                f"In Azure Monitor, collect MySQL syslog via DCR "
+                f"and create scheduled query alerts."
+            )
+            prereqs = [
+                "Configure DCR to collect Syslog from MySQL/MariaDB servers",
+                "Consider Azure Monitor for MySQL workloads",
+            ]
+            return kql, desc, notes, prereqs
+        
+        # ── Generic / unknown database engine ────────────────────────
+        kql = (
+            "Event\n"
+            "| where EventLog == \"Application\"\n"
+            "| where EventLevelName in (\"Error\", \"Warning\")\n"
+            "| project TimeGenerated, Computer, EventID, Source, RenderedDescription\n"
+            "| order by TimeGenerated desc"
+        )
+        desc = f"Create log alert for database monitoring ({name})"
+        notes = (
+            f"Original SCOM data source module: {type_id}\n\n"
+            f"This monitor uses database-level queries in SCOM. "
+            f"In Azure Monitor, configure event or performance collection "
+            f"via DCR and create scheduled query alerts. "
+            f"Review the original SCOM data source to determine the correct "
+            f"event source filter."
+        )
+        prereqs = [
+            "Configure DCR to collect relevant event logs from database servers",
+            "Review SCOM data source module to refine KQL query",
+        ]
+        return kql, desc, notes, prereqs
+    
+    @staticmethod
+    def _sql_server_database_kql(context: str, name: str) -> tuple[str, str]:
+        """Return (kql, description) for a SQL-Server-specific database monitor."""
+        if "agentjob" in context or ("job" in context and "sql" in context):
             kql = (
                 "Event\n"
                 "| where EventLog == \"Application\"\n"
@@ -718,8 +835,9 @@ Perf
                 "| project TimeGenerated, Computer, EventID, RenderedDescription\n"
                 "| order by TimeGenerated desc"
             )
-            desc = f"Create log alert for SQL Agent job monitoring ({name})"
-        elif "dbfilesize" in type_lower or "filespace" in type_lower or "filesize" in type_lower:
+            return kql, f"Create log alert for SQL Agent job monitoring ({name})"
+        
+        if any(kw in context for kw in ("dbfilesize", "filespace", "filesize")):
             kql = (
                 "Perf\n"
                 "| where ObjectName contains \"SQLServer\" or ObjectName contains \"Databases\"\n"
@@ -727,8 +845,9 @@ Perf
                 "| summarize AggregatedValue = avg(CounterValue) by bin(TimeGenerated, 5m), Computer, InstanceName\n"
                 "| where AggregatedValue > 90  // Adjust threshold as needed"
             )
-            desc = f"Create log alert for SQL database file/space monitoring ({name})"
-        elif "deadlock" in type_lower:
+            return kql, f"Create log alert for SQL database file/space monitoring ({name})"
+        
+        if "deadlock" in context:
             kql = (
                 "Event\n"
                 "| where EventLog == \"Application\"\n"
@@ -736,8 +855,9 @@ Perf
                 "| where RenderedDescription contains \"deadlock\"\n"
                 "| project TimeGenerated, Computer, EventID, RenderedDescription"
             )
-            desc = f"Create log alert for SQL deadlock detection ({name})"
-        elif "blocking" in type_lower or "longrunning" in type_lower:
+            return kql, f"Create log alert for SQL deadlock detection ({name})"
+        
+        if "blocking" in context or "longrunning" in context:
             kql = (
                 "Event\n"
                 "| where EventLog == \"Application\"\n"
@@ -745,8 +865,9 @@ Perf
                 "| where EventLevelName in (\"Error\", \"Warning\")\n"
                 "| project TimeGenerated, Computer, EventID, RenderedDescription"
             )
-            desc = f"Create log alert for SQL blocking/long-running query detection ({name})"
-        elif "backup" in type_lower:
+            return kql, f"Create log alert for SQL blocking/long-running query detection ({name})"
+        
+        if "backup" in context:
             kql = (
                 "Event\n"
                 "| where EventLog == \"Application\"\n"
@@ -754,8 +875,9 @@ Perf
                 "| where EventID in (18204, 18210, 18264, 18265, 3041)  // Backup failure events\n"
                 "| project TimeGenerated, Computer, EventID, RenderedDescription"
             )
-            desc = f"Create log alert for SQL backup monitoring ({name})"
-        elif "availab" in type_lower or "alwayson" in type_lower or "replica" in type_lower:
+            return kql, f"Create log alert for SQL backup monitoring ({name})"
+        
+        if any(kw in context for kw in ("availab", "alwayson", "replica")):
             kql = (
                 "Event\n"
                 "| where EventLog == \"Application\"\n"
@@ -763,8 +885,9 @@ Perf
                 "| where EventID in (35264, 35265, 35206, 35254, 41404, 41405)  // AG events\n"
                 "| project TimeGenerated, Computer, EventID, RenderedDescription"
             )
-            desc = f"Create log alert for SQL Availability Group monitoring ({name})"
-        elif "connection" in type_lower or "login" in type_lower:
+            return kql, f"Create log alert for SQL Availability Group monitoring ({name})"
+        
+        if "connection" in context or "login" in context:
             kql = (
                 "Event\n"
                 "| where EventLog == \"Application\"\n"
@@ -772,39 +895,18 @@ Perf
                 "| where EventID in (17828, 17832, 17836, 18456)  // Login failure events\n"
                 "| project TimeGenerated, Computer, EventID, RenderedDescription"
             )
-            desc = f"Create log alert for SQL connection monitoring ({name})"
-        else:
-            # Generic SQL Server event monitoring
-            kql = (
-                "Event\n"
-                "| where EventLog == \"Application\"\n"
-                "| where Source contains \"MSSQL\" or Source == \"SQLSERVERAGENT\"\n"
-                "| where EventLevelName in (\"Error\", \"Warning\")\n"
-                "| project TimeGenerated, Computer, EventID, Source, RenderedDescription\n"
-                "| order by TimeGenerated desc"
-            )
-            desc = f"Create log alert for SQL Server monitoring ({name})"
+            return kql, f"Create log alert for SQL connection monitoring ({name})"
         
-        return [AzureMonitorRecommendation(
-            target_type=AzureMonitorTargetType.LOG_ALERT,
-            description=desc,
-            implementation_notes=(
-                f"Original SCOM data source module: {type_id}\n\n"
-                f"This SQL Server monitor uses internal database queries in SCOM. "
-                f"In Azure Monitor, equivalent monitoring is achieved via:\n"
-                f"1. Event collection from Application log (SQL Server events)\n"
-                f"2. Performance counter collection via DCR\n"
-                f"3. Azure SQL Analytics solution for deeper SQL insights"
-            ),
-            complexity=MigrationComplexity.MODERATE,
-            confidence_score=0.75,
-            prerequisites=[
-                "Configure DCR to collect Application event log from SQL Servers",
-                "Configure SQL Server performance counters in DCR",
-                "Consider enabling Azure SQL Analytics for deeper insights",
-            ],
-            kql_query=kql,
-        )]
+        # Generic SQL Server fallback
+        kql = (
+            "Event\n"
+            "| where EventLog == \"Application\"\n"
+            "| where Source contains \"MSSQL\" or Source == \"SQLSERVERAGENT\"\n"
+            "| where EventLevelName in (\"Error\", \"Warning\")\n"
+            "| project TimeGenerated, Computer, EventID, Source, RenderedDescription\n"
+            "| order by TimeGenerated desc"
+        )
+        return kql, f"Create log alert for SQL Server monitoring ({name})"
 
     def _map_performance_counter(
         self,
