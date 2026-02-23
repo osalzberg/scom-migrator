@@ -178,6 +178,7 @@ class AzureMonitorMapper:
         
         # Map based on rule type
         if rule.rule_type == RuleType.PERFORMANCE_RULE:
+            perf_kql = self._generate_perf_kql(rule.data_source) if rule.data_source else None
             recommendations.append(AzureMonitorRecommendation(
                 target_type=AzureMonitorTargetType.DATA_COLLECTION_RULE,
                 description="Create Data Collection Rule for performance metrics",
@@ -191,8 +192,27 @@ class AzureMonitorMapper:
                     "Azure Monitor Agent installed on target machines",
                     "Log Analytics workspace configured",
                 ],
-                kql_query=self._generate_perf_kql(rule.data_source) if rule.data_source else None,
+                kql_query=perf_kql,
             ))
+            # Also generate a LOG_ALERT so a scheduled query rule is created
+            if perf_kql:
+                counter_name = ""
+                if rule.data_source:
+                    counter_name = rule.data_source.performance_counter or ""
+                recommendations.append(AzureMonitorRecommendation(
+                    target_type=AzureMonitorTargetType.LOG_ALERT,
+                    description=f"Create log alert for performance counter {counter_name}",
+                    implementation_notes=(
+                        "Alert on performance counter data collected via DCR. "
+                        "Adjust the threshold in the KQL query to match your environment."
+                    ),
+                    complexity=MigrationComplexity.SIMPLE,
+                    confidence_score=0.85,
+                    prerequisites=[
+                        "Performance counter DCR must be configured and collecting data",
+                    ],
+                    kql_query=perf_kql,
+                ))
             complexity = MigrationComplexity.SIMPLE
             
         elif rule.rule_type == RuleType.EVENT_RULE:
@@ -223,7 +243,8 @@ class AzureMonitorMapper:
                     name=rule.display_name or rule.name,
                 )
                 recommendations.extend(ds_recommendations)
-            else:
+            # Fallback: if data_source returned no recs, or no data_source at all
+            if not recommendations:
                 recommendations.append(AzureMonitorRecommendation(
                     target_type=AzureMonitorTargetType.LOG_ALERT,
                     description="Create scheduled query alert rule",
@@ -232,8 +253,42 @@ class AzureMonitorMapper:
                     ),
                     complexity=MigrationComplexity.MODERATE,
                     confidence_score=0.7,
+                    kql_query=(
+                        "Event\n"
+                        "| where EventLog == \"Application\"\n"
+                        "| where EventLevelName in (\"Error\", \"Warning\")\n"
+                        "| project TimeGenerated, Computer, EventID, Source, RenderedDescription"
+                    ),
                 ))
                 
+        elif rule.rule_type == RuleType.COLLECTION_RULE:
+            # Collection rules gather data — map to DCR + optional LOG_ALERT
+            if rule.data_source:
+                ds_recommendations = self._map_data_source(
+                    rule.data_source,
+                    threshold=None,
+                    threshold_operator=None,
+                    severity=rule.alert_severity or Severity.INFORMATION,
+                    name=rule.display_name or rule.name,
+                )
+                recommendations.extend(ds_recommendations)
+            if not recommendations:
+                recommendations.append(AzureMonitorRecommendation(
+                    target_type=AzureMonitorTargetType.DATA_COLLECTION_RULE,
+                    description="Create Data Collection Rule for data collection",
+                    implementation_notes=(
+                        "This SCOM collection rule gathers data. Use Azure Monitor "
+                        "Data Collection Rules (DCR) to replicate this data collection."
+                    ),
+                    complexity=MigrationComplexity.SIMPLE,
+                    confidence_score=0.8,
+                    prerequisites=[
+                        "Azure Monitor Agent installed on target machines",
+                        "Log Analytics workspace configured",
+                    ],
+                ))
+            complexity = MigrationComplexity.SIMPLE
+
         elif rule.rule_type == RuleType.SCRIPT_RULE:
             recommendations.append(AzureMonitorRecommendation(
                 target_type=AzureMonitorTargetType.DATA_COLLECTION_RULE,
@@ -628,8 +683,129 @@ Perf
                 self._map_http_source(data_source, severity, name)
             )
         
+        elif data_source.data_source_type == DataSourceType.DATABASE:
+            recommendations.extend(
+                self._map_database_source(data_source, threshold, threshold_operator, severity, name)
+            )
+        
         return recommendations
     
+    def _map_database_source(
+        self,
+        data_source: SCOMDataSource,
+        threshold: Optional[float],
+        threshold_operator: Optional[str],
+        severity: Severity,
+        name: str,
+    ) -> list[AzureMonitorRecommendation]:
+        """Map database/SQL-based monitoring to Azure Monitor log alerts.
+        
+        SCOM SQL Server monitors use internal SQL queries to check DB health,
+        agent jobs, disk space, etc. In Azure Monitor, these map to
+        Log Analytics scheduled query alerts using the Event table
+        (for SQL Server events forwarded via DCR) or Azure SQL Analytics.
+        """
+        type_id = data_source.type_id or ""
+        type_lower = type_id.lower()
+        
+        # Determine the best KQL based on the SCOM data source module type
+        if "agentjob" in type_lower or "job" in type_lower:
+            kql = (
+                "Event\n"
+                "| where EventLog == \"Application\"\n"
+                "| where Source == \"SQLSERVERAGENT\"\n"
+                "| where EventLevelName in (\"Error\", \"Warning\")\n"
+                "| project TimeGenerated, Computer, EventID, RenderedDescription\n"
+                "| order by TimeGenerated desc"
+            )
+            desc = f"Create log alert for SQL Agent job monitoring ({name})"
+        elif "dbfilesize" in type_lower or "filespace" in type_lower or "filesize" in type_lower:
+            kql = (
+                "Perf\n"
+                "| where ObjectName contains \"SQLServer\" or ObjectName contains \"Databases\"\n"
+                "| where CounterName contains \"File\" or CounterName contains \"Space\"\n"
+                "| summarize AggregatedValue = avg(CounterValue) by bin(TimeGenerated, 5m), Computer, InstanceName\n"
+                "| where AggregatedValue > 90  // Adjust threshold as needed"
+            )
+            desc = f"Create log alert for SQL database file/space monitoring ({name})"
+        elif "deadlock" in type_lower:
+            kql = (
+                "Event\n"
+                "| where EventLog == \"Application\"\n"
+                "| where Source contains \"MSSQL\"\n"
+                "| where RenderedDescription contains \"deadlock\"\n"
+                "| project TimeGenerated, Computer, EventID, RenderedDescription"
+            )
+            desc = f"Create log alert for SQL deadlock detection ({name})"
+        elif "blocking" in type_lower or "longrunning" in type_lower:
+            kql = (
+                "Event\n"
+                "| where EventLog == \"Application\"\n"
+                "| where Source contains \"MSSQL\"\n"
+                "| where EventLevelName in (\"Error\", \"Warning\")\n"
+                "| project TimeGenerated, Computer, EventID, RenderedDescription"
+            )
+            desc = f"Create log alert for SQL blocking/long-running query detection ({name})"
+        elif "backup" in type_lower:
+            kql = (
+                "Event\n"
+                "| where EventLog == \"Application\"\n"
+                "| where Source contains \"MSSQL\"\n"
+                "| where EventID in (18204, 18210, 18264, 18265, 3041)  // Backup failure events\n"
+                "| project TimeGenerated, Computer, EventID, RenderedDescription"
+            )
+            desc = f"Create log alert for SQL backup monitoring ({name})"
+        elif "availab" in type_lower or "alwayson" in type_lower or "replica" in type_lower:
+            kql = (
+                "Event\n"
+                "| where EventLog == \"Application\"\n"
+                "| where Source contains \"MSSQL\"\n"
+                "| where EventID in (35264, 35265, 35206, 35254, 41404, 41405)  // AG events\n"
+                "| project TimeGenerated, Computer, EventID, RenderedDescription"
+            )
+            desc = f"Create log alert for SQL Availability Group monitoring ({name})"
+        elif "connection" in type_lower or "login" in type_lower:
+            kql = (
+                "Event\n"
+                "| where EventLog == \"Application\"\n"
+                "| where Source contains \"MSSQL\"\n"
+                "| where EventID in (17828, 17832, 17836, 18456)  // Login failure events\n"
+                "| project TimeGenerated, Computer, EventID, RenderedDescription"
+            )
+            desc = f"Create log alert for SQL connection monitoring ({name})"
+        else:
+            # Generic SQL Server event monitoring
+            kql = (
+                "Event\n"
+                "| where EventLog == \"Application\"\n"
+                "| where Source contains \"MSSQL\" or Source == \"SQLSERVERAGENT\"\n"
+                "| where EventLevelName in (\"Error\", \"Warning\")\n"
+                "| project TimeGenerated, Computer, EventID, Source, RenderedDescription\n"
+                "| order by TimeGenerated desc"
+            )
+            desc = f"Create log alert for SQL Server monitoring ({name})"
+        
+        return [AzureMonitorRecommendation(
+            target_type=AzureMonitorTargetType.LOG_ALERT,
+            description=desc,
+            implementation_notes=(
+                f"Original SCOM data source module: {type_id}\n\n"
+                f"This SQL Server monitor uses internal database queries in SCOM. "
+                f"In Azure Monitor, equivalent monitoring is achieved via:\n"
+                f"1. Event collection from Application log (SQL Server events)\n"
+                f"2. Performance counter collection via DCR\n"
+                f"3. Azure SQL Analytics solution for deeper SQL insights"
+            ),
+            complexity=MigrationComplexity.MODERATE,
+            confidence_score=0.75,
+            prerequisites=[
+                "Configure DCR to collect Application event log from SQL Servers",
+                "Configure SQL Server performance counters in DCR",
+                "Consider enabling Azure SQL Analytics for deeper insights",
+            ],
+            kql_query=kql,
+        )]
+
     def _map_performance_counter(
         self,
         data_source: SCOMDataSource,
