@@ -1159,7 +1159,7 @@ class ARMTemplateGenerator:
             },
             "workspaceName": {
                 "type": "string",
-                "defaultValue": f"law-scom-migration-{mp_name[:20]}",
+                "defaultValue": f"law-scom-migration-{mp_name[:20].strip('-')}",
                 "metadata": {"description": "Name of the Log Analytics workspace. If createNewWorkspace=false, this should be the name of an EXISTING workspace in the SAME resource group. If the workspace is in a different resource group, use workspaceResourceId instead."}
             },
             "workspaceResourceId": {
