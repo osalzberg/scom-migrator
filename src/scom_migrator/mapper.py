@@ -111,6 +111,7 @@ class AzureMonitorMapper:
             manual_steps.append("Create custom availability logic using Log Analytics scheduled queries")
         
         elif monitor.monitor_type == MonitorType.DEPENDENCY_MONITOR:
+            display = monitor.display_name or monitor.name
             recommendations.append(AzureMonitorRecommendation(
                 target_type=AzureMonitorTargetType.VM_INSIGHTS,
                 description="Use VM Insights with Azure Monitor Agent",
@@ -130,6 +131,31 @@ class AzureMonitorMapper:
                     "Enable VM Insights on target VMs",
                     "Install Azure Monitor Agent (AMA)",
                     "Configure Log Analytics workspace",
+                ],
+            ))
+            # Also add a LOG_ALERT so a scheduledQueryRule resource is generated
+            recommendations.append(AzureMonitorRecommendation(
+                target_type=AzureMonitorTargetType.LOG_ALERT,
+                description=f"Health rollup alert for {display}",
+                implementation_notes=(
+                    f"**Dependency Rollup Health Monitor — {display}**\n\n"
+                    "SCOM dependency rollup monitors aggregate health from child components.\n"
+                    "In Azure Monitor the recommended equivalent is a Heartbeat-based\n"
+                    "scheduled query alert that fires when a monitored machine stops\n"
+                    "sending heartbeats.\n\n"
+                    "Adjust the threshold (`1h`) and computer scope as needed."
+                ),
+                complexity=MigrationComplexity.SIMPLE,
+                confidence_score=0.8,
+                kql_query=(
+                    "Heartbeat\n"
+                    "| summarize LastHeartbeat = max(TimeGenerated) by Computer\n"
+                    "| where LastHeartbeat < ago(1h)\n"
+                    "| project Computer, LastHeartbeat, TimeSinceLastHeartbeat = now() - LastHeartbeat"
+                ),
+                prerequisites=[
+                    "Azure Monitor Agent installed and sending heartbeats",
+                    "Log Analytics workspace configured",
                 ],
             ))
         
