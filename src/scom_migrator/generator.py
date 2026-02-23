@@ -34,6 +34,17 @@ class ARMTemplateGenerator:
     including alert rules, action groups, and data collection rules.
     """
     
+    # Azure ARM deployment limit is 800 resources per template.
+    # Use 750 to leave headroom for infrastructure resources.
+    ARM_RESOURCE_LIMIT = 750
+    
+    # Resource types that are "alert rules" and can be batched across templates
+    ALERT_RESOURCE_TYPES = {
+        "Microsoft.Insights/scheduledQueryRules",
+        "Microsoft.Insights/metricAlerts",
+        "Microsoft.Insights/activityLogAlerts",
+    }
+    
     # API versions for different resource types
     API_VERSIONS = {
         "Microsoft.Insights/metricAlerts": "2018-03-01",
@@ -48,6 +59,71 @@ class ARMTemplateGenerator:
         """Initialize the ARM template generator."""
         self._used_names: set[str] = set()
     
+    # ------------------------------------------------------------------
+    # Template splitting
+    # ------------------------------------------------------------------
+    @classmethod
+    def _split_template_if_needed(
+        cls, template: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        """Split an ARM template into batches of ≤ ARM_RESOURCE_LIMIT resources.
+        
+        Infrastructure resources (workspace, action group, DCR, workbook, …)
+        are placed in the *first* template.  Alert rules are spread evenly
+        across as many templates as required.
+        
+        Returns a list with one dict per batch.  If the original template
+        fits within the limit, a single-element list is returned.
+        """
+        resources = template.get("resources", [])
+        if len(resources) <= cls.ARM_RESOURCE_LIMIT:
+            return [template]
+        
+        # Partition into infra vs alert resources
+        infra: list[dict] = []
+        alerts: list[dict] = []
+        for r in resources:
+            if r.get("type") in cls.ALERT_RESOURCE_TYPES:
+                alerts.append(r)
+            else:
+                infra.append(r)
+        
+        # How many alert slots per batch?
+        alerts_per_batch = cls.ARM_RESOURCE_LIMIT - len(infra)
+        if alerts_per_batch < 1:
+            alerts_per_batch = 1  # safety
+        
+        batches: list[dict[str, Any]] = []
+        for i in range(0, max(len(alerts), 1), alerts_per_batch):
+            batch_alerts = alerts[i : i + alerts_per_batch]
+            batch_num = len(batches) + 1
+            total_batches = -1  # placeholder, filled below
+            
+            batch_template = {
+                k: v for k, v in template.items()
+                if k != "resources"
+            }
+            
+            # First batch gets infra + alerts; subsequent batches get only alerts
+            if batch_num == 1:
+                batch_template["resources"] = infra + batch_alerts
+            else:
+                batch_template["resources"] = batch_alerts
+            
+            batches.append(batch_template)
+        
+        total_batches = len(batches)
+        
+        # Stamp metadata on each batch
+        for idx, b in enumerate(batches, 1):
+            meta = b.get("metadata", {})
+            meta["batchNumber"] = idx
+            meta["totalBatches"] = total_batches
+            meta["resourceCount"] = len(b["resources"])
+            b["metadata"] = meta
+        
+        return batches
+    
     def generate_from_report(
         self,
         report: MigrationReport,
@@ -56,21 +132,30 @@ class ARMTemplateGenerator:
         workspace_name: str = "scom-migration-workspace",
         include_workspace: bool = True,
         include_action_group: bool = True,
-    ) -> dict[str, Any]:
+    ) -> dict[str, Any] | list[dict[str, Any]]:
         """
-        Generate a complete ARM template from a migration report.
+        Generate ARM template(s) from a migration report.
         
-        Args:
-            report: The migration report to generate from
-            resource_group: Target resource group
-            location: Azure region
-            workspace_name: Name for Log Analytics workspace
-            include_workspace: Whether to include workspace creation
-            include_action_group: Whether to include action group creation
-            
-        Returns:
-            Dictionary representing the ARM template
+        Returns a single dict when the template fits within the ARM
+        800-resource limit, or a list of dicts (batches) when it doesn't.
         """
+        single = self._generate_from_report_raw(
+            report, resource_group, location, workspace_name,
+            include_workspace, include_action_group,
+        )
+        batches = self._split_template_if_needed(single)
+        return batches[0] if len(batches) == 1 else batches
+    
+    def _generate_from_report_raw(
+        self,
+        report: MigrationReport,
+        resource_group: str = "[resourceGroup().name]",
+        location: str = "[resourceGroup().location]",
+        workspace_name: str = "scom-migration-workspace",
+        include_workspace: bool = True,
+        include_action_group: bool = True,
+    ) -> dict[str, Any]:
+        """Generate a single (unsplit) ARM template dict from a migration report."""
         template = ARMTemplate(
             parameters=self._generate_parameters(workspace_name),
             variables=self._generate_variables(report),
@@ -1143,8 +1228,8 @@ class ARMTemplateGenerator:
         mp_name = report.management_pack.name.replace(".", "-").lower()
         mp_display = report.management_pack.display_name or report.management_pack.name
         
-        # Get individual templates
-        arm_template = self.generate_from_report(report)
+        # Get individual templates (raw = unsplit, so we can combine first)
+        arm_template = self._generate_from_report_raw(report)
         dcr_template = self.generate_data_collection_rules(report)
         workbook_template = self.generate_workbook(report)
         custom_log_dcr = self.generate_custom_log_dcr(report)
@@ -1410,5 +1495,6 @@ class ARMTemplateGenerator:
             }
         }
         
-        return combined_template
+        batches = self._split_template_if_needed(combined_template)
+        return batches[0] if len(batches) == 1 else batches
 

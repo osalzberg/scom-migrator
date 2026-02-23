@@ -1222,6 +1222,7 @@ New-AzResourceGroupDeployment `
             </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
     <script>
         let selectedFile = null;
         let analysisResult = null;
@@ -1887,10 +1888,18 @@ New-AzResourceGroupDeployment `
             let content, filename, mimeType = 'application/json';
             
             if (type === 'complete') {
-                content = JSON.stringify(analysisResult._complete_template || {}, null, 2);
+                const tpl = analysisResult._complete_template || {};
+                if (Array.isArray(tpl)) {
+                    return downloadAsZip(tpl, 'complete-deployment');
+                }
+                content = JSON.stringify(tpl, null, 2);
                 filename = 'complete-deployment.json';
             } else if (type === 'arm') {
-                content = JSON.stringify(analysisResult._arm_template || {}, null, 2);
+                const tpl = analysisResult._arm_template || {};
+                if (Array.isArray(tpl)) {
+                    return downloadAsZip(tpl, 'azuredeploy');
+                }
+                content = JSON.stringify(tpl, null, 2);
                 filename = 'azuredeploy.json';
             } else if (type === 'dcr') {
                 content = JSON.stringify(analysisResult._dcr_template || {}, null, 2);
@@ -1926,6 +1935,75 @@ New-AzResourceGroupDeployment `
             const a = document.createElement('a');
             a.href = url;
             a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+        
+        /**
+         * Download an array of ARM template batches as a ZIP file.
+         * Each batch becomes "<prefix>-part-N.json".
+         * A README.md with deployment instructions is included.
+         */
+        async function downloadAsZip(batches, prefix) {
+            const zip = new JSZip();
+            const total = batches.length;
+            
+            batches.forEach((tpl, i) => {
+                const name = total === 1
+                    ? `${prefix}.json`
+                    : `${prefix}-part-${i + 1}-of-${total}.json`;
+                zip.file(name, JSON.stringify(tpl, null, 2));
+            });
+            
+            // Add deployment instructions
+            const readme = [
+                `# Deployment Instructions`,
+                ``,
+                `This archive contains **${total} ARM template(s)**.`,
+                `The templates were split because the total resource count exceeds`,
+                `Azure\'s 800-resource-per-deployment limit.`,
+                ``,
+                `## Deploy in order`,
+                ``,
+                `Deploy **part 1** first (it contains the workspace, action group,`,
+                `workbook, and DCRs). Then deploy the remaining parts in any order.`,
+                ``,
+                `### Azure CLI`,
+                `\`\`\`bash`,
+            ];
+            for (let i = 0; i < total; i++) {
+                const fname = total === 1
+                    ? `${prefix}.json`
+                    : `${prefix}-part-${i + 1}-of-${total}.json`;
+                readme.push(`az deployment group create \\`);
+                readme.push(`  --resource-group <YOUR-RG> \\`);
+                readme.push(`  --template-file ${fname}`);
+                if (i < total - 1) readme.push(``);
+            }
+            readme.push(`\`\`\``);
+            readme.push(``);
+            readme.push(`### PowerShell`);
+            readme.push(`\`\`\`powershell`);
+            for (let i = 0; i < total; i++) {
+                const fname = total === 1
+                    ? `${prefix}.json`
+                    : `${prefix}-part-${i + 1}-of-${total}.json`;
+                readme.push(`New-AzResourceGroupDeployment \``);
+                readme.push(`  -ResourceGroupName <YOUR-RG> \``);
+                readme.push(`  -TemplateFile ${fname}`);
+                if (i < total - 1) readme.push(``);
+            }
+            readme.push(`\`\`\``);
+            
+            zip.file('README.md', readme.join('\n'));
+            
+            const blob = await zip.generateAsync({type: 'blob'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${prefix}.zip`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
