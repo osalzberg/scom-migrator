@@ -958,13 +958,27 @@
                                             </div>
                                         </div>
                                     </div>
+                                    <!-- Multi-batch info (shown when templates are split) -->
+                                    <div class="alert alert-info mb-3" id="multiBatchInfo" style="display: none;">
+                                        <div class="d-flex align-items-start">
+                                            <i class="bi bi-info-circle-fill me-3 fs-5"></i>
+                                            <div>
+                                                <strong>Multiple template files</strong>
+                                                <p class="mb-0 small mt-1">
+                                                    This management pack generates more than 800 Azure resources, exceeding ARM's per-deployment limit.
+                                                    The download will be a <strong>ZIP file</strong> containing multiple template parts and a README with deployment instructions.
+                                                    <strong>Deploy part 1 first</strong> (creates workspace, action group, DCRs, workbook), wait for it to complete, then deploy the remaining parts.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
                                     <!-- All-in-One Download -->
                                     <div class="mb-4">
                                         <button class="btn btn-success btn-lg w-100 d-flex align-items-center justify-content-center py-3" onclick="downloadArtifact('complete')">
                                             <i class="bi bi-download me-2" style="font-size: 1.5rem;"></i>
                                             <div class="text-start">
-                                                <span class="fw-bold">Download All-in-One Template</span>
-                                                <span class="d-block" style="font-size: 0.75rem; opacity: 0.9;">Single deployment with alerts, DCRs, workbook &amp; custom logs</span>
+                                                <span class="fw-bold" id="completeDownloadLabel">Download All-in-One Template</span>
+                                                <span class="d-block" id="completeDownloadSubLabel" style="font-size: 0.75rem; opacity: 0.9;">Single deployment with alerts, DCRs, workbook &amp; custom logs</span>
                                             </div>
                                         </button>
                                     </div>
@@ -1472,6 +1486,23 @@ New-AzResourceGroupDeployment `
             // Show floating download button
             document.getElementById('floatingDownloadBtn').style.display = 'block';
             
+            // Check if templates are split into multiple batches
+            const isSplit = Array.isArray(data._complete_template);
+            const multiBatchInfo = document.getElementById('multiBatchInfo');
+            const completeLabel = document.getElementById('completeDownloadLabel');
+            const completeSubLabel = document.getElementById('completeDownloadSubLabel');
+            if (isSplit) {
+                const parts = data._complete_template.length;
+                const totalRes = data._complete_template.reduce((s, b) => s + b.resources.length, 0);
+                multiBatchInfo.style.display = 'block';
+                completeLabel.textContent = `Download All Templates (ZIP — ${parts} parts)`;
+                completeSubLabel.textContent = `${totalRes} resources split across ${parts} deployments. Includes README with instructions.`;
+            } else {
+                multiBatchInfo.style.display = 'none';
+                completeLabel.textContent = 'Download All-in-One Template';
+                completeSubLabel.innerHTML = 'Single deployment with alerts, DCRs, workbook &amp; custom logs';
+            }
+            
             // MP Info
             document.getElementById('mpName').textContent = data.management_pack.display_name || data.management_pack.name;
             document.getElementById('mpVersion').textContent = 'Version: ' + data.management_pack.version;
@@ -1961,41 +1992,92 @@ New-AzResourceGroupDeployment `
             const readme = [
                 `# Deployment Instructions`,
                 ``,
-                `This archive contains **${total} ARM template(s)**.`,
-                `The templates were split because the total resource count exceeds`,
-                `Azure\'s 800-resource-per-deployment limit.`,
+                `This archive contains **${total} ARM template(s)** because the total`,
+                `resource count (${batches.reduce((s,b) => s + b.resources.length, 0)}) exceeds Azure's 800-resource-per-deployment limit.`,
                 ``,
-                `## Deploy in order`,
+                `## How to deploy`,
                 ``,
-                `Deploy **part 1** first (it contains the workspace, action group,`,
-                `workbook, and DCRs). Then deploy the remaining parts in any order.`,
+                `### Option A — Azure Portal (recommended for first-timers)`,
                 ``,
-                `### Azure CLI`,
+                `1. Go to the [Azure Portal](https://portal.azure.com)`,
+                `2. Search for **"Deploy a custom template"** in the top search bar`,
+                `3. Click **"Build your own template in the editor"**`,
+                `4. Click **"Load file"** and select **part-1** from this archive`,
+                `5. Click **Save**, fill in the parameters (resource group, workspace name, etc.)`,
+                `6. Click **Review + create**, then **Create**`,
+                `7. **Wait for the deployment to complete** (check Notifications or go to the resource group → Deployments)`,
+                `8. Repeat steps 2–6 for **part-2** (and any additional parts)`,
+                `   - For parts 2+, use the **same resource group** and **same parameter values** as part 1`,
+                `   - Parts 2+ only contain alert rules — no need to change workspace/action group settings`,
+                ``,
+                `> **Important:** Deploy part 1 first and wait for it to finish before deploying part 2.`,
+                `> Part 1 creates the workspace, action group, workbook, and DCRs that the alert rules depend on.`,
+                ``,
+                `### Option B — Azure CLI`,
+                ``,
                 `\`\`\`bash`,
+                `# Set your resource group`,
+                `RG="<YOUR-RESOURCE-GROUP>"`,
+                ``,
             ];
             for (let i = 0; i < total; i++) {
                 const fname = total === 1
                     ? `${prefix}.json`
                     : `${prefix}-part-${i + 1}-of-${total}.json`;
+                if (i === 0) {
+                    readme.push(`# Step ${i + 1}: Deploy infrastructure + first batch of alert rules`);
+                } else {
+                    readme.push(`# Step ${i + 1}: Deploy alert rules batch ${i + 1} (wait for previous step to complete)`);
+                }
                 readme.push(`az deployment group create \\`);
-                readme.push(`  --resource-group <YOUR-RG> \\`);
+                readme.push(`  --resource-group $RG \\`);
                 readme.push(`  --template-file ${fname}`);
-                if (i < total - 1) readme.push(``);
+                readme.push(``);
             }
             readme.push(`\`\`\``);
             readme.push(``);
-            readme.push(`### PowerShell`);
+            readme.push(`### Option C — PowerShell`);
+            readme.push(``);
             readme.push(`\`\`\`powershell`);
+            readme.push(`# Set your resource group`);
+            readme.push(`$RG = "<YOUR-RESOURCE-GROUP>"`);
+            readme.push(``);
             for (let i = 0; i < total; i++) {
                 const fname = total === 1
                     ? `${prefix}.json`
                     : `${prefix}-part-${i + 1}-of-${total}.json`;
+                if (i === 0) {
+                    readme.push(`# Step ${i + 1}: Deploy infrastructure + first batch of alert rules`);
+                } else {
+                    readme.push(`# Step ${i + 1}: Deploy alert rules batch ${i + 1} (wait for previous step to complete)`);
+                }
                 readme.push(`New-AzResourceGroupDeployment \``);
-                readme.push(`  -ResourceGroupName <YOUR-RG> \``);
-                readme.push(`  -TemplateFile ${fname}`);
-                if (i < total - 1) readme.push(``);
+                readme.push(`  -ResourceGroupName $RG \``);
+                readme.push(`  -TemplateFile "${fname}"`);
+                readme.push(``);
             }
             readme.push(`\`\`\``);
+            readme.push(``);
+            readme.push(`## What's in each file?`);
+            readme.push(``);
+            readme.push(`| File | Resources | Contents |`);
+            readme.push(`|------|-----------|----------|`);
+            batches.forEach((tpl, i) => {
+                const fname = `${prefix}-part-${i + 1}-of-${total}.json`;
+                const count = tpl.resources.length;
+                const types = {};
+                tpl.resources.forEach(r => { types[r.type] = (types[r.type] || 0) + 1; });
+                const desc = i === 0
+                    ? 'Workspace, Action Group, DCRs, Workbook + Alert Rules'
+                    : 'Alert Rules only';
+                readme.push(`| ${fname} | ${count} | ${desc} |`);
+            });
+            readme.push(``);
+            readme.push(`## Troubleshooting`);
+            readme.push(``);
+            readme.push(`- **"Resource not defined in template"** error on part 2+: Make sure part 1 deployed successfully first.`);
+            readme.push(`- **Parameter errors on part 2+:** Use the exact same parameter values as part 1 (same workspace name, action group name, etc.)`);
+            readme.push(`- **Deployment takes a long time:** Large batches of alert rules can take 10-20 minutes. Check progress in Azure Portal → Resource Group → Deployments.`);
             
             zip.file('README.md', readme.join('\n'));
             
