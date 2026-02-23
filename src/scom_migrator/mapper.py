@@ -175,6 +175,11 @@ class AzureMonitorMapper:
                 notes.append(f"Original alert message: {monitor.alert_message}")
             manual_steps.extend(notes)
         
+        # Universal safety-net: ensure at least one LOG_ALERT / METRIC_ALERT
+        self._ensure_alert_recommendation(
+            recommendations, monitor.display_name or monitor.name, "monitor"
+        )
+        
         return MigrationMapping(
             source_type="Monitor",
             source_id=monitor.id,
@@ -337,6 +342,11 @@ class AzureMonitorMapper:
             manual_steps.append("Review original script and convert to Azure Function or Automation Runbook")
             if rule.data_source and rule.data_source.script_body:
                 manual_steps.append("Script content available in raw_xml for reference")
+        
+        # Universal safety-net: ensure at least one LOG_ALERT / METRIC_ALERT
+        self._ensure_alert_recommendation(
+            recommendations, rule.display_name or rule.name, "rule"
+        )
         
         return MigrationMapping(
             source_type="Rule",
@@ -614,6 +624,11 @@ Event
             "4. Create KQL queries to retrieve the discovered data",
             "5. Optionally create Azure Workbooks to visualize the inventory",
         ])
+        
+        # Universal safety-net: ensure at least one LOG_ALERT / METRIC_ALERT
+        self._ensure_alert_recommendation(
+            recommendations, discovery.display_name or discovery.name, "discovery"
+        )
         
         return MigrationMapping(
             source_type="Discovery",
@@ -933,6 +948,64 @@ Perf
             "| order by TimeGenerated desc"
         )
         return kql, f"Create log alert for SQL Server monitoring ({name})"
+
+    # ------------------------------------------------------------------
+    # Universal safety-net: guarantee every mapping has an ARM resource
+    # ------------------------------------------------------------------
+    _ALERT_TARGET_TYPES = {
+        AzureMonitorTargetType.LOG_ALERT,
+        AzureMonitorTargetType.METRIC_ALERT,
+    }
+
+    def _ensure_alert_recommendation(
+        self,
+        recommendations: list[AzureMonitorRecommendation],
+        name: str,
+        source_type: str = "component",
+    ) -> None:
+        """Guarantee *recommendations* contains at least one LOG_ALERT or METRIC_ALERT.
+
+        The ARM generator only creates resources for those two target types.
+        If none is present yet we auto-append a LOG_ALERT, reusing the best
+        KQL query already carried by an existing recommendation (DCR,
+        VM_INSIGHTS, etc.) so the generated alert rule is as specific as
+        possible rather than a generic stub.
+        """
+        if any(r.target_type in self._ALERT_TARGET_TYPES for r in recommendations):
+            return  # already covered
+
+        # Try to borrow a KQL query from an existing recommendation
+        kql = None
+        for r in recommendations:
+            if r.kql_query:
+                kql = r.kql_query
+                break
+
+        if not kql:
+            # Absolute fallback — a generic Application-event query
+            kql = (
+                "Event\n"
+                "| where EventLog == \"Application\"\n"
+                "| where EventLevelName in (\"Error\", \"Warning\")\n"
+                "| project TimeGenerated, Computer, EventID, Source, RenderedDescription"
+            )
+
+        recommendations.append(AzureMonitorRecommendation(
+            target_type=AzureMonitorTargetType.LOG_ALERT,
+            description=f"Scheduled query alert for {name}",
+            implementation_notes=(
+                f"Auto-generated alert rule for SCOM {source_type} **{name}**.\n\n"
+                "Review and adjust the KQL query, severity, and evaluation "
+                "frequency to match your operational requirements."
+            ),
+            complexity=MigrationComplexity.MODERATE,
+            confidence_score=0.7,
+            kql_query=kql,
+            prerequisites=[
+                "Azure Monitor Agent collecting required data",
+                "Log Analytics workspace configured",
+            ],
+        ))
 
     def _map_performance_counter(
         self,

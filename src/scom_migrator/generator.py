@@ -1358,7 +1358,7 @@ class ARMTemplateGenerator:
         
         # Add alert rules from ARM template (with dependency on workspace if creating new)
         for res in arm_template.get("resources", []):
-            if res.get("type") == "Microsoft.Insights/scheduledQueryRules":
+            if res.get("type") in self.ALERT_RESOURCE_TYPES:
                 alert_res = res.copy()
                 # Always deploy - workspace is resolved from name or resourceId
                 # (user must ensure workspace exists if createNewWorkspace=false)
@@ -1485,7 +1485,7 @@ class ARMTemplateGenerator:
                 },
                 "alertRulesDeployed": {
                     "type": "int",
-                    "value": len([r for r in combined_resources if r.get("type") == "Microsoft.Insights/scheduledQueryRules"])
+                    "value": len([r for r in combined_resources if r.get("type") in self.ALERT_RESOURCE_TYPES])
                 },
                 "dcrDeployed": {
                     "type": "int",
