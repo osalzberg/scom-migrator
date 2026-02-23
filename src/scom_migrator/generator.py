@@ -108,7 +108,14 @@ class ARMTemplateGenerator:
             if batch_num == 1:
                 batch_template["resources"] = infra + batch_alerts
             else:
-                batch_template["resources"] = batch_alerts
+                # Strip dependsOn from alert resources in later batches —
+                # the referenced infra resources (action group, workspace)
+                # were deployed in batch 1 and don't exist in this template.
+                cleaned_alerts = []
+                for alert in batch_alerts:
+                    a = {k: v for k, v in alert.items() if k != "dependsOn"}
+                    cleaned_alerts.append(a)
+                batch_template["resources"] = cleaned_alerts
             
             batches.append(batch_template)
         
