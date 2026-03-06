@@ -70,23 +70,32 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
         # Parse and analyze
         parser = ManagementPackParser(content=content)
         mp = parser.parse()
+        logging.info(f'Parsed: {mp.total_monitors} monitors, {mp.total_rules} rules, {len(mp.discoveries)} discoveries')
         
         analyzer = MigrationAnalyzer()
         report = analyzer.analyze(mp)
+        logging.info(f'Analyzed: {report.total_components} components')
         
-        # Generate templates for download (store in app state or session - simplified here)
+        # Generate templates - reuse intermediate results to avoid double work
         generator = ARMTemplateGenerator()
         arm_template = generator.generate_from_report(report)
         dcr_template = generator.generate_data_collection_rules(report)
         workbook_template = generator.generate_workbook(report)
         custom_log_dcr = generator.generate_custom_log_dcr(report)
-        complete_template = generator.generate_complete_deployment(report)
+        complete_template = generator.generate_complete_deployment(
+            report,
+            prebuilt_arm=arm_template,
+            prebuilt_dcr=dcr_template,
+            prebuilt_workbook=workbook_template,
+            prebuilt_custom_log_dcr=custom_log_dcr,
+        )
+        logging.info('Generated all templates')
         
         # Get stats
         stats = analyzer.get_summary_stats(report)
         
-        # Return results
-        result = report.model_dump()
+        # Return results - exclude raw_xml to reduce response size
+        result = report.model_dump(exclude={'mappings': {'__all__': {'recommendations': {'__all__': {'arm_template_snippet'}}}}})
         result['stats'] = stats
         result['_arm_template'] = arm_template
         result['_dcr_template'] = dcr_template

@@ -1218,6 +1218,10 @@ class ARMTemplateGenerator:
         self,
         report: MigrationReport,
         location: str = "[resourceGroup().location]",
+        prebuilt_arm: dict[str, Any] | list[dict[str, Any]] | None = None,
+        prebuilt_dcr: dict[str, Any] | None = None,
+        prebuilt_workbook: dict[str, Any] | None = None,
+        prebuilt_custom_log_dcr: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """
         Generate a single combined ARM template with all resources.
@@ -1225,9 +1229,16 @@ class ARMTemplateGenerator:
         Combines alert rules, DCRs, workbook, and custom log DCR into one template.
         Optionally creates a new Log Analytics workspace.
         
+        When prebuilt_* templates are provided, they are reused instead of
+        regenerating them from scratch (avoids duplicated work).
+        
         Args:
             report: The migration report
             location: Azure region
+            prebuilt_arm: Pre-generated ARM template (from generate_from_report)
+            prebuilt_dcr: Pre-generated DCR template
+            prebuilt_workbook: Pre-generated workbook template
+            prebuilt_custom_log_dcr: Pre-generated custom log DCR template
             
         Returns:
             Combined ARM template dictionary
@@ -1235,11 +1246,15 @@ class ARMTemplateGenerator:
         mp_name = report.management_pack.name.replace(".", "-").lower()
         mp_display = report.management_pack.display_name or report.management_pack.name
         
-        # Get individual templates (raw = unsplit, so we can combine first)
-        arm_template = self._generate_from_report_raw(report)
-        dcr_template = self.generate_data_collection_rules(report)
-        workbook_template = self.generate_workbook(report)
-        custom_log_dcr = self.generate_custom_log_dcr(report)
+        # Get individual templates — reuse prebuilt if provided, otherwise generate
+        if prebuilt_arm is not None:
+            # If prebuilt_arm is a list (batched), use the first batch which has infra
+            arm_template = prebuilt_arm[0] if isinstance(prebuilt_arm, list) else prebuilt_arm
+        else:
+            arm_template = self._generate_from_report_raw(report)
+        dcr_template = prebuilt_dcr if prebuilt_dcr is not None else self.generate_data_collection_rules(report)
+        workbook_template = prebuilt_workbook if prebuilt_workbook is not None else self.generate_workbook(report)
+        custom_log_dcr = prebuilt_custom_log_dcr if prebuilt_custom_log_dcr is not None else self.generate_custom_log_dcr(report)
         
         # Combine parameters (deduplicate)
         combined_params = {

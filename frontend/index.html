@@ -1345,9 +1345,17 @@ New-AzResourceGroupDeployment `
             })
             .then(response => {
                 if (!response.ok) {
-                    throw new Error(response.status === 404 
-                        ? 'API endpoint not found. Make sure the app is deployed to Azure or the API is running locally.'
-                        : 'Server returned ' + response.status + ' ' + response.statusText);
+                    if (response.status === 404) {
+                        throw new Error('API endpoint not found. Make sure the app is deployed to Azure or the API is running locally.');
+                    }
+                    // Try to read error details from the response body
+                    const contentType = response.headers.get('content-type') || '';
+                    if (contentType.includes('application/json')) {
+                        return response.json().then(errData => {
+                            throw new Error(errData.error || 'Server returned ' + response.status);
+                        });
+                    }
+                    throw new Error('Server returned ' + response.status + ' ' + response.statusText);
                 }
                 const contentType = response.headers.get('content-type') || '';
                 if (!contentType.includes('application/json')) {

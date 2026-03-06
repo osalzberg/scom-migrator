@@ -1198,11 +1198,18 @@ class ManagementPackParser:
     def _identify_data_source_type(self, type_id: str, elem: ET.Element) -> DataSourceType:
         """Identify the type of data source from its type ID and content."""
         type_id_lower = type_id.lower()
-        elem_str = ET.tostring(elem, encoding="unicode").lower()
         
+        # First try matching on type_id alone (fast path)
         for ds_type, patterns in self.DATA_SOURCE_PATTERNS.items():
             for pattern in patterns:
-                if pattern.lower() in type_id_lower or pattern.lower() in elem_str:
+                if pattern.lower() in type_id_lower:
+                    return ds_type
+        
+        # Only serialize element to string if type_id didn't match (slower path)
+        elem_str = ET.tostring(elem, encoding="unicode").lower()
+        for ds_type, patterns in self.DATA_SOURCE_PATTERNS.items():
+            for pattern in patterns:
+                if pattern.lower() in elem_str:
                     return ds_type
         
         return DataSourceType.UNKNOWN
