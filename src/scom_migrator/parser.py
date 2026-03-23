@@ -201,8 +201,17 @@ class ManagementPackParser:
             raise FileNotFoundError(f"Management pack not found: {self.file_path}")
         
         # Use defusedxml for safe parsing
-        self._tree = SafeET.parse(str(self.file_path))
-        self._root = self._tree.getroot()
+        try:
+            self._tree = SafeET.parse(str(self.file_path))
+            self._root = self._tree.getroot()
+        except ET.ParseError as e:
+            raise ValueError(
+                "INVALID_XML: The file is not a valid XML Management Pack. "
+                "This can happen if the file is a sealed (.mp) or bundled (.mpb) Management Pack, "
+                "a binary file, or a corrupted/incomplete XML file. "
+                "Please export the Management Pack as XML from the SCOM Console: "
+                "Administration → Management Packs → Right-click → Export Management Pack → Save as .xml"
+            ) from e
         
         # Detect namespace from root element
         if self._root.tag.startswith("{"):

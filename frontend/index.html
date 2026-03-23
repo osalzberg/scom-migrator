@@ -1384,7 +1384,7 @@ New-AzResourceGroupDeployment `
         
         function showUserFriendlyError(errorMsg) {
             // Check for our specific error types and show friendly modal
-            if (errorMsg.includes('SEALED_MP:') || errorMsg.includes('MPB_BUNDLE:') || 
+            if (errorMsg.includes('SEALED_MP:') || errorMsg.includes('MPB_BUNDLE:') || errorMsg.includes('INVALID_XML:') ||
                 errorMsg.includes('sealed Management Pack') || errorMsg.includes('Management Pack Bundle') ||
                 errorMsg.includes('not well-formed') || errorMsg.includes('invalid token')) {
                 
@@ -1394,19 +1394,28 @@ New-AzResourceGroupDeployment `
                 
                 const isSealed = errorMsg.includes('SEALED_MP:') || errorMsg.includes('sealed');
                 const isMPB = errorMsg.includes('MPB_BUNDLE:') || errorMsg.includes('Bundle');
+                const isInvalidXML = errorMsg.includes('INVALID_XML:') || errorMsg.includes('not well-formed') || errorMsg.includes('invalid token');
                 
-                let title = '📦 Sealed Management Pack Detected';
-                let fileType = '.mp file';
+                let title, fileType, description;
                 if (isMPB) {
                     title = '📦 Management Pack Bundle Detected';
                     fileType = '.mpb bundle';
+                    description = `This ${fileType} cannot be analyzed directly. Please export it as XML from SCOM.`;
+                } else if (isInvalidXML && !isSealed) {
+                    title = '⚠️ Invalid XML File';
+                    fileType = 'file';
+                    description = 'The uploaded file is not a valid XML Management Pack. This can happen if the file is a sealed (.mp) or bundled (.mpb) Management Pack, a binary file, or a corrupted/incomplete XML file.';
+                } else {
+                    title = '📦 Sealed Management Pack Detected';
+                    fileType = '.mp file';
+                    description = `This ${fileType} cannot be analyzed directly. Please export it as XML from SCOM.`;
                 }
                 
                 modal.innerHTML = `
                     <div style="background:white;border-radius:var(--radius-lg);padding:32px;max-width:500px;margin:20px;box-shadow:var(--shadow-xl);">
                         <h2 style="margin:0 0 16px 0;color:var(--primary);font-size:20px;font-weight:600;">${title}</h2>
                         <p style="color:var(--gray-700);margin:0 0 20px 0;line-height:1.6;">
-                            This ${fileType} cannot be analyzed directly. Please export it as XML from SCOM.
+                            ${description}
                         </p>
                         <div style="background:var(--gray-50);border-radius:var(--radius-md);padding:16px;margin-bottom:20px;">
                             <p style="margin:0 0 12px 0;font-weight:600;color:var(--gray-800);">How to export:</p>

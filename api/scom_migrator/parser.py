@@ -228,14 +228,23 @@ class ManagementPackParser:
             content_bytes = self._content if isinstance(self._content, bytes) else self._content.encode('utf-8')
             xml_content = self._extract_xml_from_content(content_bytes)
             
-            if xml_content:
-                self._root = SafeET.fromstring(xml_content)
-            else:
-                # Parse as raw XML
-                if isinstance(self._content, str):
-                    self._root = SafeET.fromstring(self._content)
+            try:
+                if xml_content:
+                    self._root = SafeET.fromstring(xml_content)
                 else:
-                    self._root = SafeET.fromstring(self._content)
+                    # Parse as raw XML
+                    if isinstance(self._content, str):
+                        self._root = SafeET.fromstring(self._content)
+                    else:
+                        self._root = SafeET.fromstring(self._content)
+            except ET.ParseError as e:
+                raise ValueError(
+                    "INVALID_XML: The uploaded file is not a valid XML Management Pack. "
+                    "This can happen if the file is a sealed (.mp) or bundled (.mpb) Management Pack, "
+                    "a binary file, or a corrupted/incomplete XML file. "
+                    "Please export the Management Pack as XML from the SCOM Console: "
+                    "Administration → Management Packs → Right-click → Export Management Pack → Save as .xml"
+                ) from e
             self._tree = ET.ElementTree(self._root)
         elif self.file_path:
             if not self.file_path.exists():
