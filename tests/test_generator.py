@@ -131,3 +131,69 @@ class TestARMTemplateGenerator:
         assert generator._sanitize_resource_name("Name.With.Dots") == "name-with-dots"
         assert generator._sanitize_resource_name("Name--With--Dashes") == "name-with-dashes"
         assert len(generator._sanitize_resource_name("A" * 100)) <= 60
+
+    def test_metric_alerts_generated_for_native_counters(self, sample_report, generator):
+        """CPU/memory/disk perf monitors should produce native metric alerts."""
+        template = generator.generate_from_report(sample_report)
+
+        metric_alerts = [
+            r for r in template["resources"]
+            if r["type"] == "Microsoft.Insights/metricAlerts"
+        ]
+        # The sample has Processor / Memory / LogicalDisk monitors that all map
+        # to native Azure metrics, so at least one metric alert must exist.
+        assert len(metric_alerts) > 0
+
+    def test_metric_alert_references_defined_parameter(self, sample_report, generator):
+        """Every metric alert must scope to a declared targetResourceId parameter.
+
+        Regression for the deployment bug where metric alerts referenced
+        ``parameters('targetResourceId')`` without the parameter being declared,
+        causing the ARM deployment to fail.
+        """
+        template = generator.generate_from_report(sample_report)
+
+        metric_alerts = [
+            r for r in template["resources"]
+            if r["type"] == "Microsoft.Insights/metricAlerts"
+        ]
+        assert len(metric_alerts) > 0
+
+        # The parameter the alerts reference must actually be declared.
+        assert "targetResourceId" in template.get("parameters", {})
+
+        for alert in metric_alerts:
+            blob = json.dumps(alert)
+            assert "parameters('targetResourceId')" in blob
+            # Guarded so it is skipped when no target resource is supplied,
+            # avoiding an empty-scope deployment failure.
+            assert "targetResourceId" in json.dumps(alert.get("condition", ""))
+
+    def test_metric_alert_preserves_scom_threshold(self, sample_report, generator):
+        """The CPU metric alert must carry the real SCOM threshold (85), not a default."""
+        template = generator.generate_from_report(sample_report)
+
+        cpu_alert = next(
+            (r for r in template["resources"]
+             if r["type"] == "Microsoft.Insights/metricAlerts"
+             and "cpu" in r.get("name", "").lower()),
+            None,
+        )
+        assert cpu_alert is not None
+        criterion = cpu_alert["properties"]["criteria"]["allOf"][0]
+        assert criterion["metricName"] == "Percentage CPU"
+        assert criterion["threshold"] == 85.0
+
+    def test_standalone_dcr_not_mutated_by_complete_deployment(self, sample_report, generator):
+        """Generating the complete deployment must not corrupt the standalone DCR.
+
+        Regression for the in-place mutation bug where the complete-deployment
+        builder rewrote the shared DCR's workspace reference to an undefined
+        variable, breaking the standalone DCR download.
+        """
+        dcr_template = generator.generate_data_collection_rules(sample_report)
+        generator.generate_complete_deployment(sample_report, prebuilt_dcr=dcr_template)
+
+        blob = json.dumps(dcr_template)
+        assert "parameters('workspaceResourceId')" in blob
+        assert "variables('actualWorkspaceResourceId')" not in blob

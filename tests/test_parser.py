@@ -109,8 +109,32 @@ class TestManagementPackParser:
             None
         )
         
-        if perf_monitor and perf_monitor.data_source:
-            assert perf_monitor.data_source.data_source_type in [
-                DataSourceType.PERFORMANCE_COUNTER,
-                DataSourceType.UNKNOWN,
-            ]
+        assert perf_monitor is not None
+        assert perf_monitor.data_source is not None
+        # A monitor carrying a performance counter must be classified as a
+        # PERFORMANCE_COUNTER data source (not left UNKNOWN) so it can map to a
+        # native Azure metric alert. SCOM threshold monitors use type IDs the
+        # pattern table doesn't enumerate, so classification also relies on the
+        # extracted counter as a fallback signal.
+        assert perf_monitor.data_source.performance_counter
+        assert perf_monitor.data_source.data_source_type == DataSourceType.PERFORMANCE_COUNTER
+
+    def test_threshold_monitor_classified_as_performance(self):
+        """Regression: SCOM ThresholdMonitorType perf monitors must not stay UNKNOWN.
+
+        The CPU monitor uses ``Microsoft.Windows.Performance.ThresholdMonitorType``,
+        which is absent from the type-id pattern table. It must still be
+        classified as a performance counter via the extracted counter, and its
+        real SCOM threshold (85) must be preserved rather than defaulted.
+        """
+        parser = ManagementPackParser(SAMPLE_MP_PATH)
+        mp = parser.parse()
+
+        cpu_monitor = next((m for m in mp.monitors if "CPU" in m.id), None)
+        assert cpu_monitor is not None
+        ds = cpu_monitor.data_source
+        assert ds is not None
+        assert ds.data_source_type == DataSourceType.PERFORMANCE_COUNTER
+        assert ds.performance_object == "Processor"
+        assert ds.performance_counter == "% Processor Time"
+        assert cpu_monitor.threshold == 85.0

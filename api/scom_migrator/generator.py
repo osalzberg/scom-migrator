@@ -12,8 +12,9 @@ resources based on migration analysis.
 """
 
 import json
+import copy
 from typing import Optional, Any
-from datetime import datetime
+from datetime import datetime, timezone
 
 from .models import (
     MigrationReport,
@@ -219,6 +220,17 @@ class ARMTemplateGenerator:
                         "description": "Resource ID of the Action Group for alerts"
                     }
                 },
+                "targetResourceId": {
+                    "type": "string",
+                    "defaultValue": "",
+                    "metadata": {
+                        "description": "Resource ID that metric alerts are scoped to (e.g. a VM or VMSS). Leave empty to skip metric-alert deployment; metric alerts only deploy when this is set."
+                    }
+                },
+            },
+            variables={
+                "workspaceId": "[parameters('workspaceResourceId')]",
+                "actionGroupId": "[parameters('actionGroupResourceId')]",
             },
         )
         
@@ -355,6 +367,13 @@ class ARMTemplateGenerator:
                 "defaultValue": [],
                 "metadata": {
                     "description": "Array of VM resource IDs to monitor. Example: ['/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Compute/virtualMachines/{vm}']"
+                }
+            },
+            "targetResourceId": {
+                "type": "string",
+                "defaultValue": "",
+                "metadata": {
+                    "description": "Resource ID that metric alerts are scoped to (e.g. a VM or VMSS). Leave empty to skip metric-alert deployment; metric alerts only deploy when this is set."
                 }
             },
         }
@@ -528,6 +547,7 @@ class ARMTemplateGenerator:
             api_version=self.API_VERSIONS["Microsoft.Insights/metricAlerts"],
             name=f"alert-{safe_name}",
             location="global",
+            condition="[not(empty(parameters('targetResourceId')))]",
             properties=default_properties,
             depends_on=["[variables('actionGroupId')]"],
             tags={
@@ -549,7 +569,14 @@ class ARMTemplateGenerator:
         safe_name = self._sanitize_resource_name(f"{mapping.source_name}-{index}")
         
         # Get KQL query from recommendation
-        query = rec.kql_query or "// TODO: Add KQL query"
+        # Fall back to a valid (never comment-only) query if a recommendation
+        # arrives without KQL, so the generated rule always deploys cleanly.
+        # The mapper normally always supplies a query, so this is a safety net.
+        query = rec.kql_query or (
+            "Event\n"
+            "| where EventLevelName in (\"Error\", \"Warning\")\n"
+            "| project TimeGenerated, Computer, EventID, Source, RenderedDescription"
+        )
         
         # Build a meaningful description
         description_parts = [f"Migrated from SCOM: {mapping.source_name}"]
@@ -1246,15 +1273,20 @@ class ARMTemplateGenerator:
         mp_name = report.management_pack.name.replace(".", "-").lower()
         mp_display = report.management_pack.display_name or report.management_pack.name
         
-        # Get individual templates — reuse prebuilt if provided, otherwise generate
+        # Get individual templates — reuse prebuilt if provided, otherwise generate.
+        # deepcopy the prebuilt inputs so the resource rewrites below (workspace
+        # references, dependsOn, workbook name) never mutate the caller's standalone
+        # templates. The API returns the same dcr/workbook objects separately, so
+        # in-place mutation here would corrupt those downloads.
         if prebuilt_arm is not None:
             # If prebuilt_arm is a list (batched), use the first batch which has infra
             arm_template = prebuilt_arm[0] if isinstance(prebuilt_arm, list) else prebuilt_arm
+            arm_template = copy.deepcopy(arm_template)
         else:
             arm_template = self._generate_from_report_raw(report)
-        dcr_template = prebuilt_dcr if prebuilt_dcr is not None else self.generate_data_collection_rules(report)
-        workbook_template = prebuilt_workbook if prebuilt_workbook is not None else self.generate_workbook(report)
-        custom_log_dcr = prebuilt_custom_log_dcr if prebuilt_custom_log_dcr is not None else self.generate_custom_log_dcr(report)
+        dcr_template = copy.deepcopy(prebuilt_dcr) if prebuilt_dcr is not None else self.generate_data_collection_rules(report)
+        workbook_template = copy.deepcopy(prebuilt_workbook) if prebuilt_workbook is not None else self.generate_workbook(report)
+        custom_log_dcr = copy.deepcopy(prebuilt_custom_log_dcr) if prebuilt_custom_log_dcr is not None else self.generate_custom_log_dcr(report)
         
         # Combine parameters (deduplicate)
         combined_params = {
@@ -1294,7 +1326,7 @@ class ARMTemplateGenerator:
             },
             "actionGroupEmail": {
                 "type": "string",
-                "defaultValue": "alerts@company.com",
+                "defaultValue": "",
                 "metadata": {"description": "Email address for alert notifications"}
             },
             "environment": {
@@ -1323,6 +1355,11 @@ class ARMTemplateGenerator:
                 "type": "string",
                 "defaultValue": "C:/Logs/SCOMScripts/*.log",
                 "metadata": {"description": "Path pattern for custom log files from migrated scripts (use forward slashes)"}
+            },
+            "targetResourceId": {
+                "type": "string",
+                "defaultValue": "",
+                "metadata": {"description": "Resource ID that metric alerts are scoped to (e.g. a VM or VMSS). Leave empty to skip metric-alert deployment; metric alerts only deploy when this is set."}
             }
         }
         
@@ -1484,7 +1521,7 @@ class ARMTemplateGenerator:
             "metadata": {
                 "description": f"Complete SCOM to Azure Monitor migration deployment for {mp_display}",
                 "author": "SCOM Migration Tool",
-                "generatedAt": datetime.utcnow().isoformat()
+                "generatedAt": datetime.now(timezone.utc).isoformat()
             },
             "parameters": combined_params,
             "variables": combined_vars,

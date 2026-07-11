@@ -693,6 +693,23 @@ class ManagementPackParser:
         
         return None
     
+    def _find_first(
+        self, *paths: str, element: Optional[ET.Element] = None
+    ) -> Optional[ET.Element]:
+        """Return the first element matching any of *paths*, else None.
+
+        Uses an explicit ``is not None`` check instead of boolean truthiness.
+        An XML element with no children evaluates to False in ElementTree/lxml,
+        so the older ``self._find(a) or self._find(b)`` pattern silently discarded
+        valid leaf elements such as ``<Threshold>50</Threshold>`` (text but no
+        child elements) — causing parsed values to be lost and defaults used.
+        """
+        for path in paths:
+            found = self._find(path, element)
+            if found is not None:
+                return found
+        return None
+
     def _findall(self, path: str, element: Optional[ET.Element] = None) -> list[ET.Element]:
         """Find all elements with namespace handling."""
         root = element if element is not None else self._root
@@ -737,7 +754,7 @@ class ManagementPackParser:
     def _parse_metadata(self) -> ManagementPackMetadata:
         """Parse management pack identity and metadata."""
         # Try different paths for manifest/identity
-        identity = self._find(".//Identity") or self._find(".//Manifest/Identity")
+        identity = self._find_first(".//Identity", ".//Manifest/Identity")
         
         mp_id = ""
         version = ""
@@ -908,10 +925,8 @@ class ManagementPackParser:
         threshold_operator = None
         if config is not None:
             # Try multiple threshold element names
-            threshold_elem = (
-                self._find(".//Threshold", config) or
-                self._find(".//ThresholdValue", config) or
-                self._find(".//Value", config)
+            threshold_elem = self._find_first(
+                ".//Threshold", ".//ThresholdValue", ".//Value", element=config
             )
             if threshold_elem is not None:
                 try:
@@ -1019,7 +1034,7 @@ class ManagementPackParser:
         alert_message = ""
         for wa in write_actions:
             if "Alert" in self._get_attr(wa, "ID", "") or "Alert" in self._get_attr(wa, "TypeID", ""):
-                severity_elem = self._find(".//Severity", wa) or self._find(".//Priority", wa)
+                severity_elem = self._find_first(".//Severity", ".//Priority", element=wa)
                 if severity_elem is not None:
                     sev_text = self._get_text(severity_elem)
                     if sev_text in ["1", "2"] or "critical" in sev_text.lower():
@@ -1098,10 +1113,8 @@ class ManagementPackParser:
     def _parse_data_source(self, parent: ET.Element) -> Optional[SCOMDataSource]:
         """Parse data source configuration from a parent element."""
         # Look for data source elements
-        ds_elem = (
-            self._find(".//DataSource", parent) or
-            self._find(".//DataSources/DataSource", parent) or
-            self._find(".//ProbeAction", parent)
+        ds_elem = self._find_first(
+            ".//DataSource", ".//DataSources/DataSource", ".//ProbeAction", element=parent
         )
         
         # Also check Configuration element for inline configurations (like service monitors)
@@ -1121,7 +1134,7 @@ class ManagementPackParser:
         
         # Parse interval
         interval = None
-        interval_elem = self._find(".//IntervalSeconds", source_elem) or self._find(".//Frequency", source_elem)
+        interval_elem = self._find_first(".//IntervalSeconds", ".//Frequency", element=source_elem)
         if interval_elem is not None:
             try:
                 interval = int(self._get_text(interval_elem))
@@ -1141,7 +1154,7 @@ class ManagementPackParser:
         if log_name is not None:
             data_source.event_log = self._get_text(log_name)
         
-        event_id = self._find(".//EventDisplayNumber", source_elem) or self._find(".//EventID", source_elem)
+        event_id = self._find_first(".//EventDisplayNumber", ".//EventID", element=source_elem)
         if event_id is not None:
             try:
                 data_source.event_id = int(self._get_text(event_id))
@@ -1149,7 +1162,7 @@ class ManagementPackParser:
                 pass
         
         # Event source
-        event_source = self._find(".//PublisherName", source_elem) or self._find(".//Source", source_elem)
+        event_source = self._find_first(".//PublisherName", ".//Source", element=source_elem)
         if event_source is not None:
             data_source.event_source = self._get_text(event_source)
         
@@ -1164,9 +1177,18 @@ class ManagementPackParser:
                 if elem is not None:
                     setattr(data_source, field, self._get_text(elem))
                     break
+
+        # If a performance counter was extracted, ensure this is classified as a
+        # performance-counter data source. SCOM threshold monitors use many type
+        # IDs the pattern table doesn't enumerate (e.g.
+        # Microsoft.Windows.Performance.ThresholdMonitorType), which would
+        # otherwise leave them UNKNOWN and skip native Azure metric-alert mapping.
+        if data_source.performance_counter and ds_type == DataSourceType.UNKNOWN:
+            ds_type = DataSourceType.PERFORMANCE_COUNTER
+            data_source.data_source_type = DataSourceType.PERFORMANCE_COUNTER
         
         # WMI specific
-        wmi_ns = self._find(".//Namespace", source_elem) or self._find(".//NameSpace", source_elem)
+        wmi_ns = self._find_first(".//Namespace", ".//NameSpace", element=source_elem)
         if wmi_ns is not None:
             data_source.wmi_namespace = self._get_text(wmi_ns)
         

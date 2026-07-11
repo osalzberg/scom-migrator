@@ -1,16 +1,35 @@
 """
-SCOM Management Pack XML Parser
+SCOM to Azure Monitor Migration Tool - Management Pack Parser
 
-Parses SCOM Management Pack (.xml or .mp) files and extracts all relevant
+Copyright (c) 2026 Oren Salzberg
+Licensed under the MIT License. See LICENSE file in the project root.
+
+Parses SCOM Management Pack (.xml, .mp, or .mpb) files and extracts all relevant
 monitoring configurations including monitors, rules, discoveries, and classes.
 """
 
 import re
+import zipfile
+import tempfile
+import os
+import io
 from pathlib import Path
 from typing import Optional, Any
 from xml.etree import ElementTree as ET
 
 from defusedxml import ElementTree as SafeET
+
+try:
+    from cabarchive import CabArchive
+    HAS_CABARCHIVE = True
+except ImportError:
+    HAS_CABARCHIVE = False
+
+try:
+    import olefile
+    HAS_OLEFILE = True
+except ImportError:
+    HAS_OLEFILE = False
 
 from .models import (
     ManagementPack,
@@ -33,7 +52,7 @@ class ManagementPackParser:
     """
     Parser for SCOM Management Pack XML files.
     
-    Supports both sealed (.mp) and unsealed (.xml) management packs.
+    Supports sealed (.mp), bundles (.mpb), and unsealed (.xml) management packs.
     """
     
     # Common SCOM XML namespaces
@@ -111,17 +130,22 @@ class ManagementPackParser:
         ],
     }
     
-    def __init__(self, file_path: str | Path):
+    def __init__(self, file_path: str | Path | None = None, content: bytes | str | None = None):
         """
-        Initialize the parser with a management pack file.
+        Initialize the parser with a management pack file or content.
         
         Args:
             file_path: Path to the management pack XML file
+            content: Raw XML content as bytes or string (for serverless environments)
         """
-        self.file_path = Path(file_path)
+        self.file_path = Path(file_path) if file_path else None
+        self._content = content
         self._tree: Optional[ET.ElementTree] = None
         self._root: Optional[ET.Element] = None
         self._detected_namespace: str = ""
+        
+        if not file_path and not content:
+            raise ValueError("Either file_path or content must be provided")
     
     def parse(self) -> ManagementPack:
         """
@@ -150,7 +174,7 @@ class ManagementPackParser:
         if total_components == 0 and len(classes) == 0:
             raise ValueError(
                 "No SCOM components found in the file. This does not appear to be a valid "
-                "SCOM Management Pack. Please ensure you are uploading a .xml or .mp file "
+                "SCOM Management Pack. Please ensure you are uploading a .xml, .mp, or .mpb file "
                 "exported from System Center Operations Manager."
             )
         
@@ -196,26 +220,447 @@ class ManagementPackParser:
                 )
 
     def _load_xml(self) -> None:
-        """Load and parse the XML file safely."""
-        if not self.file_path.exists():
-            raise FileNotFoundError(f"Management pack not found: {self.file_path}")
+        """Load and parse the XML file or content safely. Handles both .xml and .mp (CAB) files."""
+        xml_content = None
         
-        # Use defusedxml for safe parsing
-        try:
-            self._tree = SafeET.parse(str(self.file_path))
-            self._root = self._tree.getroot()
-        except ET.ParseError as e:
-            raise ValueError(
-                "INVALID_XML: The file is not a valid XML Management Pack. "
-                "This can happen if the file is a sealed (.mp) or bundled (.mpb) Management Pack, "
-                "a binary file, or a corrupted/incomplete XML file. "
-                "Please export the Management Pack as XML from the SCOM Console: "
-                "Administration → Management Packs → Right-click → Export Management Pack → Save as .xml"
-            ) from e
+        if self._content:
+            # Check if content is a sealed MP (CAB/ZIP archive)
+            content_bytes = self._content if isinstance(self._content, bytes) else self._content.encode('utf-8')
+            xml_content = self._extract_xml_from_content(content_bytes)
+            
+            try:
+                if xml_content:
+                    self._root = SafeET.fromstring(xml_content)
+                else:
+                    # Parse as raw XML
+                    if isinstance(self._content, str):
+                        self._root = SafeET.fromstring(self._content)
+                    else:
+                        self._root = SafeET.fromstring(self._content)
+            except ET.ParseError as e:
+                raise ValueError(
+                    "INVALID_XML: The uploaded file is not a valid XML Management Pack. "
+                    "This can happen if the file is a sealed (.mp) or bundled (.mpb) Management Pack, "
+                    "a binary file, or a corrupted/incomplete XML file. "
+                    "Please export the Management Pack as XML from the SCOM Console: "
+                    "Administration → Management Packs → Right-click → Export Management Pack → Save as .xml"
+                ) from e
+            self._tree = ET.ElementTree(self._root)
+        elif self.file_path:
+            if not self.file_path.exists():
+                raise FileNotFoundError(f"Management pack not found: {self.file_path}")
+            
+            # Check if it's a .mp or .mpb file (sealed management pack / bundle - CAB archive)
+            if self.file_path.suffix.lower() in ['.mp', '.mpb']:
+                xml_content = self._extract_xml_from_mp_file(self.file_path)
+                if xml_content:
+                    self._root = SafeET.fromstring(xml_content)
+                    self._tree = ET.ElementTree(self._root)
+                else:
+                    raise ValueError(
+                        "Could not extract XML from sealed management pack (.mp/.mpb file). "
+                        "The file may be corrupted or in an unsupported format. "
+                        "Try exporting the unsealed XML version from SCOM."
+                    )
+            else:
+                # Use defusedxml for safe parsing of regular XML files
+                self._tree = SafeET.parse(str(self.file_path))
+                self._root = self._tree.getroot()
+        else:
+            raise ValueError("No file path or content provided")
         
         # Detect namespace from root element
         if self._root.tag.startswith("{"):
             self._detected_namespace = self._root.tag.split("}")[0] + "}"
+    
+    def _extract_xml_from_content(self, content: bytes) -> Optional[str]:
+        """
+        Try to extract XML from content that may be a sealed MP (CAB/ZIP archive).
+        
+        Args:
+            content: Raw bytes that may be a CAB/ZIP archive or raw XML
+            
+        Returns:
+            Extracted XML string if content was an archive, None if raw XML
+        """
+        import logging
+        logging.info(f'Checking content type, first 10 bytes: {content[:10]}')
+        
+        # Check for OLE Compound Document (MPB bundles use this format)
+        # Magic bytes: D0 CF 11 E0 A1 B1 1A E1
+        is_ole = content[:8] == b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1'
+        if is_ole:
+            logging.info('File appears to be an OLE Compound Document (MPB bundle)')
+            xml_content = self._extract_xml_from_ole(content)
+            if xml_content:
+                return xml_content
+        
+        # Check for ZIP/CAB magic bytes
+        # ZIP: PK (0x50 0x4B)
+        # CAB: MSCF (0x4D 0x53 0x43 0x46)
+        is_zip = content[:2] == b'PK'
+        is_cab = content[:4] == b'MSCF'
+        
+        logging.info(f'Is ZIP: {is_zip}, Is CAB: {is_cab}')
+        
+        # Check for PE/DLL (sealed .mp files are .NET assemblies)
+        is_pe = content[:2] == b'MZ'
+        if is_pe:
+            logging.info('File appears to be a sealed .NET assembly (PE/DLL)')
+            # Sealed management packs are compiled .NET assemblies
+            # The XML is embedded as a .NET resource and requires the .NET runtime to extract
+            # Try our best-effort extraction
+            xml_content = self._extract_xml_from_assembly(content)
+            if xml_content:
+                return xml_content
+            else:
+                # Cannot extract from sealed MP - provide clear guidance
+                raise ValueError(
+                    "SEALED_MP: This is a sealed Management Pack (.mp file) which cannot be directly analyzed. "
+                    "Please export it as XML from SCOM: Administration → Management Packs → Right-click → Export Management Pack → Save as .xml"
+                )
+        
+        if is_zip or is_cab:
+            # Try as ZIP first (some .mp files are ZIP format)
+            if is_zip:
+                try:
+                    with zipfile.ZipFile(io.BytesIO(content), 'r') as zf:
+                        logging.info(f'ZIP file contains: {zf.namelist()}')
+                        for name in zf.namelist():
+                            if name.lower().endswith('.xml'):
+                                return zf.read(name).decode('utf-8')
+                        # If no .xml file, try the first file
+                        if zf.namelist():
+                            return zf.read(zf.namelist()[0]).decode('utf-8')
+                except zipfile.BadZipFile as e:
+                    logging.info(f'Not a valid ZIP file: {e}')
+            
+            # Try CAB extraction
+            xml_content = self._extract_from_cab_bytes(content)
+            if xml_content:
+                logging.info('Successfully extracted XML from CAB')
+                return xml_content
+            else:
+                logging.info('CAB extraction returned None')
+        
+        # Not an archive, check if it starts with XML marker
+        if content.strip()[:5] in [b'<?xml', b'<Mani', b'<mani']:
+            logging.info('Content appears to be raw XML')
+            return None  # Return None to indicate it should be parsed as raw XML
+            
+        # Try CAB extraction anyway (some files don't have proper magic bytes)
+        logging.info('Trying CAB extraction as fallback...')
+        xml_content = self._extract_from_cab_bytes(content)
+        if xml_content:
+            logging.info('Fallback CAB extraction succeeded')
+            return xml_content
+        
+        logging.info('Could not extract as archive, treating as raw XML')
+        return None
+    
+    def _extract_xml_from_assembly(self, content: bytes) -> Optional[str]:
+        """
+        Extract XML manifest from a sealed SCOM management pack (.NET assembly).
+        
+        Sealed .mp files are .NET assemblies with embedded XML manifests.
+        The XML is typically stored as a resource or can be found by searching
+        for XML patterns in the binary.
+        
+        Args:
+            content: Raw bytes of the .NET assembly
+            
+        Returns:
+            Extracted XML string or None
+        """
+        import logging
+        import re
+        
+        # Method 1: Search for XML manifest pattern in binary
+        # SCOM MPs typically have XML starting with <?xml or <ManagementPack
+        xml_patterns = [
+            b'<\\?xml[^>]*>\\s*<ManagementPack',
+            b'<ManagementPack[^>]*xmlns',
+            b'<\\?xml[^>]*>\\s*<Manifest',
+        ]
+        
+        for pattern in xml_patterns:
+            match = re.search(pattern, content)
+            if match:
+                start_pos = match.start()
+                logging.info(f'Found XML pattern at position {start_pos}')
+                
+                # Find the end of the XML (look for closing tag)
+                # Try to find </ManagementPack> or </Manifest>
+                end_patterns = [b'</ManagementPack>', b'</Manifest>']
+                end_pos = -1
+                for end_pattern in end_patterns:
+                    pos = content.rfind(end_pattern)
+                    if pos > start_pos:
+                        end_pos = pos + len(end_pattern)
+                        break
+                
+                if end_pos > start_pos:
+                    try:
+                        xml_bytes = content[start_pos:end_pos]
+                        # Try to decode - handle BOM and different encodings
+                        for encoding in ['utf-8', 'utf-16', 'utf-16-le', 'utf-16-be', 'latin-1']:
+                            try:
+                                xml_str = xml_bytes.decode(encoding)
+                                # Validate it's actually XML
+                                if '<ManagementPack' in xml_str or '<Manifest' in xml_str:
+                                    logging.info(f'Successfully extracted XML using {encoding} encoding')
+                                    return xml_str
+                            except (UnicodeDecodeError, UnicodeError):
+                                continue
+                    except Exception as e:
+                        logging.error(f'Error extracting XML: {e}')
+        
+        # Method 2: Look for UTF-16 encoded XML (common in .NET resources)
+        # Search for UTF-16 LE BOM followed by XML declaration
+        utf16_pattern = b'<\x00\\?\x00x\x00m\x00l\x00'
+        match = re.search(utf16_pattern, content)
+        if match:
+            start_pos = match.start()
+            logging.info(f'Found UTF-16 XML at position {start_pos}')
+            # Find end
+            end_marker = b'<\x00/\x00M\x00a\x00n\x00a\x00g\x00e\x00m\x00e\x00n\x00t\x00P\x00a\x00c\x00k\x00>\x00'
+            end_pos = content.find(end_marker, start_pos)
+            if end_pos > 0:
+                end_pos += len(end_marker)
+                try:
+                    xml_str = content[start_pos:end_pos].decode('utf-16-le')
+                    if '<ManagementPack' in xml_str:
+                        logging.info('Successfully extracted UTF-16 XML')
+                        return xml_str
+                except:
+                    pass
+        
+        logging.info('Could not extract XML from assembly')
+        return None
+    
+    def _extract_xml_from_ole(self, content: bytes) -> Optional[str]:
+        """
+        Extract XML manifest from an OLE Compound Document (.mpb bundle).
+        
+        MPB (Management Pack Bundle) files are OLE Compound Documents that
+        contain multiple management packs. The XML manifests are stored
+        in streams within the OLE structure.
+        
+        Args:
+            content: Raw bytes of the OLE Compound Document
+            
+        Returns:
+            Extracted XML string or None
+        """
+        import logging
+        
+        if not HAS_OLEFILE:
+            logging.warning('olefile library not available, cannot extract from OLE document')
+            raise ValueError(
+                "MPB_BUNDLE: This is a Management Pack Bundle (.mpb file). "
+                "Please export the individual MPs as XML from SCOM: Administration → Management Packs → Right-click → Export Management Pack → Save as .xml"
+            )
+        
+        try:
+            import io
+            ole = olefile.OleFileIO(io.BytesIO(content))
+            
+            logging.info(f'OLE file opened, root entries: {ole.listdir()}')
+            
+            xml_contents = []
+            
+            # Iterate through all streams in the OLE file
+            for entry in ole.listdir():
+                stream_name = '/'.join(entry)
+                logging.info(f'Found OLE stream: {stream_name}')
+                
+                try:
+                    stream_data = ole.openstream(entry).read()
+                    
+                    # Check if this stream contains XML
+                    # Look for common XML markers
+                    if (stream_data.strip()[:5] in [b'<?xml', b'<Mani', b'<mani'] or
+                        b'<ManagementPack' in stream_data[:1000] or
+                        b'<Manifest' in stream_data[:1000]):
+                        
+                        # Try to decode the XML
+                        for encoding in ['utf-8', 'utf-16', 'utf-16-le', 'utf-16-be', 'latin-1']:
+                            try:
+                                xml_str = stream_data.decode(encoding)
+                                if '<ManagementPack' in xml_str or '<Manifest' in xml_str:
+                                    logging.info(f'Found XML in stream: {stream_name} ({encoding})')
+                                    xml_contents.append(xml_str)
+                                    break
+                            except (UnicodeDecodeError, UnicodeError):
+                                continue
+                    
+                    # Also check for compressed/nested CAB files within the OLE
+                    elif stream_data[:4] == b'MSCF':
+                        logging.info(f'Found embedded CAB in stream: {stream_name}')
+                        nested_xml = self._extract_from_cab_bytes(stream_data)
+                        if nested_xml:
+                            xml_contents.append(nested_xml)
+                        else:
+                            # CAB extraction failed - likely LZX compression without cabextract
+                            logging.warning(f'Failed to extract CAB from OLE stream: {stream_name}')
+                    
+                    # Check for nested OLE
+                    elif stream_data[:8] == b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1':
+                        logging.info(f'Found nested OLE in stream: {stream_name}')
+                        nested_xml = self._extract_xml_from_ole(stream_data)
+                        if nested_xml:
+                            xml_contents.append(nested_xml)
+                            
+                except Exception as e:
+                    logging.debug(f'Error reading stream {stream_name}: {e}')
+                    continue
+            
+            ole.close()
+            
+            if xml_contents:
+                # If we found multiple XMLs, return the first one for now
+                # (could be enhanced to merge or handle multiple MPs)
+                logging.info(f'Extracted {len(xml_contents)} XML document(s) from OLE')
+                return xml_contents[0]
+            
+            logging.info('No XML content found in OLE streams')
+            # Provide a helpful error message for MPB files that couldn't be extracted
+            raise ValueError(
+                "MPB_BUNDLE: This Management Pack Bundle (.mpb file) cannot be extracted in this environment. "
+                "Please export the MP as XML from SCOM: Administration → Management Packs → Right-click → Export Management Pack → Save as .xml"
+            )
+            
+        except Exception as e:
+            logging.error(f'Error parsing OLE file: {e}')
+            raise ValueError(
+                f"MPB_BUNDLE: Failed to extract this Management Pack Bundle. "
+                f"Please export the MP as XML from SCOM: Administration → Management Packs → Right-click → Export Management Pack → Save as .xml"
+            )
+    
+    def _extract_xml_from_mp_file(self, file_path: Path) -> Optional[str]:
+        """
+        Extract XML content from a sealed management pack (.mp) file.
+        
+        Sealed MPs are CAB archives containing the XML manifest.
+        
+        Args:
+            file_path: Path to the .mp file
+            
+        Returns:
+            Extracted XML content as string, or None if extraction failed
+        """
+        # Read the file content
+        with open(file_path, 'rb') as f:
+            content = f.read()
+        
+        # Try extraction from content
+        xml_content = self._extract_xml_from_content(content)
+        if xml_content:
+            return xml_content
+        
+        # Try using system cabextract command (Linux/Mac)
+        try:
+            import subprocess
+            with tempfile.TemporaryDirectory() as tmpdir:
+                result = subprocess.run(
+                    ['cabextract', '-d', tmpdir, str(file_path)],
+                    capture_output=True,
+                    timeout=30
+                )
+                if result.returncode == 0:
+                    # Find extracted XML file
+                    for fname in os.listdir(tmpdir):
+                        if fname.lower().endswith('.xml'):
+                            xml_path = os.path.join(tmpdir, fname)
+                            with open(xml_path, 'r', encoding='utf-8') as f:
+                                return f.read()
+                    # Try first file if no .xml found
+                    files = os.listdir(tmpdir)
+                    if files:
+                        with open(os.path.join(tmpdir, files[0]), 'r', encoding='utf-8') as f:
+                            return f.read()
+        except (subprocess.SubprocessError, FileNotFoundError, OSError):
+            pass
+        
+        # Try using Python's zipfile (some MPs are actually ZIP format)
+        try:
+            with zipfile.ZipFile(file_path, 'r') as zf:
+                for name in zf.namelist():
+                    if name.lower().endswith('.xml'):
+                        return zf.read(name).decode('utf-8')
+                # If no .xml, try first file
+                if zf.namelist():
+                    return zf.read(zf.namelist()[0]).decode('utf-8')
+        except zipfile.BadZipFile:
+            pass
+        
+        return None
+    
+    def _extract_from_cab_bytes(self, content: bytes) -> Optional[str]:
+        """
+        Extract XML from CAB archive bytes.
+        
+        Args:
+            content: CAB file content as bytes
+            
+        Returns:
+            Extracted XML string or None
+        """
+        import logging
+        
+        # Try using cabarchive library first (pure Python, works everywhere)
+        logging.info(f'HAS_CABARCHIVE: {HAS_CABARCHIVE}')
+        if HAS_CABARCHIVE:
+            try:
+                logging.info('Attempting to parse with cabarchive library...')
+                cab = CabArchive(content)
+                files_in_cab = []
+                for cf in cab:
+                    files_in_cab.append(cf.filename)
+                    # Look for XML file in the archive
+                    if cf.filename.lower().endswith('.xml'):
+                        logging.info(f'Found XML file in CAB: {cf.filename}')
+                        return cf.buf.decode('utf-8')
+                logging.info(f'Files in CAB: {files_in_cab}')
+                # If no .xml file found, try the first file
+                for cf in cab:
+                    try:
+                        content_str = cf.buf.decode('utf-8')
+                        # Check if it looks like XML
+                        if content_str.strip().startswith('<?xml') or content_str.strip().startswith('<'):
+                            logging.info(f'Using non-.xml file that contains XML: {cf.filename}')
+                            return content_str
+                    except UnicodeDecodeError:
+                        continue
+            except Exception as e:
+                logging.error(f'cabarchive extraction failed: {e}')
+        
+        # Fallback: try using subprocess cabextract (Linux/Mac)
+        try:
+            import subprocess
+            logging.info('Trying subprocess cabextract...')
+            with tempfile.TemporaryDirectory() as tmpdir:
+                # Write content to temp file
+                cab_path = os.path.join(tmpdir, 'temp.mp')
+                with open(cab_path, 'wb') as f:
+                    f.write(content)
+                
+                # Try cabextract
+                result = subprocess.run(
+                    ['cabextract', '-d', tmpdir, cab_path],
+                    capture_output=True,
+                    timeout=30
+                )
+                if result.returncode == 0:
+                    for fname in os.listdir(tmpdir):
+                        if fname.lower().endswith('.xml'):
+                            xml_path = os.path.join(tmpdir, fname)
+                            with open(xml_path, 'r', encoding='utf-8') as f:
+                                return f.read()
+        except (subprocess.SubprocessError, FileNotFoundError, OSError, NameError):
+            pass
+        
+        return None
         
     def _find(self, path: str, element: Optional[ET.Element] = None) -> Optional[ET.Element]:
         """Find element with namespace handling."""
@@ -248,6 +693,23 @@ class ManagementPackParser:
         
         return None
     
+    def _find_first(
+        self, *paths: str, element: Optional[ET.Element] = None
+    ) -> Optional[ET.Element]:
+        """Return the first element matching any of *paths*, else None.
+
+        Uses an explicit ``is not None`` check instead of boolean truthiness.
+        An XML element with no children evaluates to False in ElementTree/lxml,
+        so the older ``self._find(a) or self._find(b)`` pattern silently discarded
+        valid leaf elements such as ``<Threshold>50</Threshold>`` (text but no
+        child elements) — causing parsed values to be lost and defaults used.
+        """
+        for path in paths:
+            found = self._find(path, element)
+            if found is not None:
+                return found
+        return None
+
     def _findall(self, path: str, element: Optional[ET.Element] = None) -> list[ET.Element]:
         """Find all elements with namespace handling."""
         root = element if element is not None else self._root
@@ -292,7 +754,7 @@ class ManagementPackParser:
     def _parse_metadata(self) -> ManagementPackMetadata:
         """Parse management pack identity and metadata."""
         # Try different paths for manifest/identity
-        identity = self._find(".//Identity") or self._find(".//Manifest/Identity")
+        identity = self._find_first(".//Identity", ".//Manifest/Identity")
         
         mp_id = ""
         version = ""
@@ -463,10 +925,8 @@ class ManagementPackParser:
         threshold_operator = None
         if config is not None:
             # Try multiple threshold element names
-            threshold_elem = (
-                self._find(".//Threshold", config) or
-                self._find(".//ThresholdValue", config) or
-                self._find(".//Value", config)
+            threshold_elem = self._find_first(
+                ".//Threshold", ".//ThresholdValue", ".//Value", element=config
             )
             if threshold_elem is not None:
                 try:
@@ -474,16 +934,34 @@ class ManagementPackParser:
                 except ValueError:
                     pass
             
+            # For process monitors, look for MinProcessCount and MaxProcessCount
+            if not threshold:
+                min_count = self._find(".//MinProcessCount", config)
+                max_count = self._find(".//MaxProcessCount", config)
+                if min_count is not None:
+                    try:
+                        threshold = float(self._get_text(min_count))
+                        threshold_operator = "GreaterEqual"
+                    except ValueError:
+                        pass
+                elif max_count is not None:
+                    try:
+                        threshold = float(self._get_text(max_count))
+                        threshold_operator = "LessEqual"
+                    except ValueError:
+                        pass
+            
             # Look for direction/operator patterns
-            direction_elem = self._find(".//Direction", config)
-            if direction_elem is not None:
-                direction = self._get_text(direction_elem).lower()
-                if "over" in direction or "greater" in direction:
-                    threshold_operator = "GreaterThan"
-                elif "under" in direction or "less" in direction:
-                    threshold_operator = "LessThan"
-                elif "equal" in direction:
-                    threshold_operator = "Equals"
+            if not threshold_operator:
+                direction_elem = self._find(".//Direction", config)
+                if direction_elem is not None:
+                    direction = self._get_text(direction_elem).lower()
+                    if "over" in direction or "greater" in direction:
+                        threshold_operator = "GreaterThan"
+                    elif "under" in direction or "less" in direction:
+                        threshold_operator = "LessThan"
+                    elif "equal" in direction:
+                        threshold_operator = "Equals"
             
             # Look for explicit operator patterns
             if not threshold_operator:
@@ -556,7 +1034,7 @@ class ManagementPackParser:
         alert_message = ""
         for wa in write_actions:
             if "Alert" in self._get_attr(wa, "ID", "") or "Alert" in self._get_attr(wa, "TypeID", ""):
-                severity_elem = self._find(".//Severity", wa) or self._find(".//Priority", wa)
+                severity_elem = self._find_first(".//Severity", ".//Priority", element=wa)
                 if severity_elem is not None:
                     sev_text = self._get_text(severity_elem)
                     if sev_text in ["1", "2"] or "critical" in sev_text.lower():
@@ -584,7 +1062,14 @@ class ManagementPackParser:
         """Parse all discovery definitions."""
         discoveries = []
         
-        discovery_elements = self._findall(".//Discovery") + self._findall(".//Discoveries/Discovery")
+        # Use set to avoid duplicates - Discovery elements may be found in multiple paths
+        discovery_ids_seen = set()
+        discovery_elements = []
+        for elem in self._findall(".//Discovery"):
+            elem_id = elem.get("ID")
+            if elem_id and elem_id not in discovery_ids_seen:
+                discovery_ids_seen.add(elem_id)
+                discovery_elements.append(elem)
         
         for elem in discovery_elements:
             discovery = self._parse_single_discovery(elem)
@@ -628,10 +1113,8 @@ class ManagementPackParser:
     def _parse_data_source(self, parent: ET.Element) -> Optional[SCOMDataSource]:
         """Parse data source configuration from a parent element."""
         # Look for data source elements
-        ds_elem = (
-            self._find(".//DataSource", parent) or
-            self._find(".//DataSources/DataSource", parent) or
-            self._find(".//ProbeAction", parent)
+        ds_elem = self._find_first(
+            ".//DataSource", ".//DataSources/DataSource", ".//ProbeAction", element=parent
         )
         
         # Also check Configuration element for inline configurations (like service monitors)
@@ -651,7 +1134,7 @@ class ManagementPackParser:
         
         # Parse interval
         interval = None
-        interval_elem = self._find(".//IntervalSeconds", source_elem) or self._find(".//Frequency", source_elem)
+        interval_elem = self._find_first(".//IntervalSeconds", ".//Frequency", element=source_elem)
         if interval_elem is not None:
             try:
                 interval = int(self._get_text(interval_elem))
@@ -671,7 +1154,7 @@ class ManagementPackParser:
         if log_name is not None:
             data_source.event_log = self._get_text(log_name)
         
-        event_id = self._find(".//EventDisplayNumber", source_elem) or self._find(".//EventID", source_elem)
+        event_id = self._find_first(".//EventDisplayNumber", ".//EventID", element=source_elem)
         if event_id is not None:
             try:
                 data_source.event_id = int(self._get_text(event_id))
@@ -679,7 +1162,7 @@ class ManagementPackParser:
                 pass
         
         # Event source
-        event_source = self._find(".//PublisherName", source_elem) or self._find(".//Source", source_elem)
+        event_source = self._find_first(".//PublisherName", ".//Source", element=source_elem)
         if event_source is not None:
             data_source.event_source = self._get_text(event_source)
         
@@ -694,9 +1177,18 @@ class ManagementPackParser:
                 if elem is not None:
                     setattr(data_source, field, self._get_text(elem))
                     break
+
+        # If a performance counter was extracted, ensure this is classified as a
+        # performance-counter data source. SCOM threshold monitors use many type
+        # IDs the pattern table doesn't enumerate (e.g.
+        # Microsoft.Windows.Performance.ThresholdMonitorType), which would
+        # otherwise leave them UNKNOWN and skip native Azure metric-alert mapping.
+        if data_source.performance_counter and ds_type == DataSourceType.UNKNOWN:
+            ds_type = DataSourceType.PERFORMANCE_COUNTER
+            data_source.data_source_type = DataSourceType.PERFORMANCE_COUNTER
         
         # WMI specific
-        wmi_ns = self._find(".//Namespace", source_elem) or self._find(".//NameSpace", source_elem)
+        wmi_ns = self._find_first(".//Namespace", ".//NameSpace", element=source_elem)
         if wmi_ns is not None:
             data_source.wmi_namespace = self._get_text(wmi_ns)
         
@@ -721,16 +1213,34 @@ class ManagementPackParser:
             if ds_type == DataSourceType.UNKNOWN:
                 data_source.data_source_type = DataSourceType.SERVICE
         
+        # Process monitor specific - extract process name from Configuration
+        process_name = self._find(".//ProcessName", source_elem)
+        if process_name is not None:
+            process_name_text = self._get_text(process_name)
+            if process_name_text:
+                # Store process name in service_name field for now (models.py uses this field)
+                data_source.service_name = process_name_text
+                # If we found a process name, ensure this is classified as a process monitor
+                if ds_type == DataSourceType.UNKNOWN:
+                    data_source.data_source_type = DataSourceType.PROCESS
+        
         return data_source
     
     def _identify_data_source_type(self, type_id: str, elem: ET.Element) -> DataSourceType:
         """Identify the type of data source from its type ID and content."""
         type_id_lower = type_id.lower()
-        elem_str = ET.tostring(elem, encoding="unicode").lower()
         
+        # First try matching on type_id alone (fast path)
         for ds_type, patterns in self.DATA_SOURCE_PATTERNS.items():
             for pattern in patterns:
-                if pattern.lower() in type_id_lower or pattern.lower() in elem_str:
+                if pattern.lower() in type_id_lower:
+                    return ds_type
+        
+        # Only serialize element to string if type_id didn't match (slower path)
+        elem_str = ET.tostring(elem, encoding="unicode").lower()
+        for ds_type, patterns in self.DATA_SOURCE_PATTERNS.items():
+            for pattern in patterns:
+                if pattern.lower() in elem_str:
                     return ds_type
         
         return DataSourceType.UNKNOWN
@@ -776,7 +1286,7 @@ class ManagementPackParser:
         if not path.exists():
             return False
         
-        if path.suffix.lower() not in [".xml", ".mp"]:
+        if path.suffix.lower() not in [".xml", ".mp", ".mpb"]:
             return False
         
         try:
